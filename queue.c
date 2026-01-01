@@ -28,5 +28,5 @@ PHP_FUNCTION(pogo_queue) {
   Z_PARAM_ZVAL(data)
   ZEND_PARSE_PARAMETERS_END();
 
-  frankenphp_queue(data);
+  pogo_queue(data);
 }
