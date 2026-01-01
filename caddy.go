@@ -21,7 +21,7 @@ var (
 
 func init() {
 	caddy.RegisterModule(Queue{})
-	httpcaddyfile.RegisterGlobalOption("frankenphp_queue", parseGlobalOption)
+	httpcaddyfile.RegisterGlobalOption("pogo_queue", parseGlobalOption)
 }
 
 type Queue struct {
@@ -34,7 +34,7 @@ type Queue struct {
 // CaddyModule returns the Caddy module information.
 func (Queue) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
-		ID:  "frankenphp_queue",
+		ID:  "pogo_queue",
 		New: func() caddy.Module { return new(Queue) },
 	}
 }
@@ -83,7 +83,7 @@ func (g *Queue) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.Errf("failed to parse size: %v", err)
 				}
 				g.Size = s
-			case "num_threads", "num":
+			case "num_threads":
 				if !d.NextArg() {
 					return d.ArgErr()
 				}
@@ -108,7 +108,7 @@ func parseGlobalOption(d *caddyfile.Dispenser, _ any) (any, error) {
 	}
 
 	return httpcaddyfile.App{
-		Name:  "frankenphp_queue",
+		Name:  "pogo_queue",
 		Value: caddyconfig.JSON(app, nil),
 	}, nil
 }

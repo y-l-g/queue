@@ -21,14 +21,14 @@ CGO_CFLAGS=$(php-config --includes) \
 CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
 xcaddy build \
     --output frankenphp \
-    --with github.com/dunglas/frankenphp-queue \
+    --with github.com/y-l-g/queue \
     --with github.com/dunglas/frankenphp/caddy \
     --with github.com/dunglas/mercure/caddy \
     --with github.com/dunglas/vulcain/caddy
     # Add extra Caddy modules and FrankenPHP extensions here
 ```
 
-That's all! Your custom FrankenPHP build contains the `frankenphp-queue` extension.
+That's all! Your custom FrankenPHP build contains the `pogo-queue` extension.
 
 ## Usage
 
@@ -39,7 +39,7 @@ Register the queue in your `Caddyfile`:
 ```caddyfile
 {
     frankenphp
-    frankenphp_queue {
+    pogo_queue {
         # All directives are optional
         worker queue-worker.php
         name m#Queue
@@ -86,7 +86,7 @@ for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests
 
 // public/index.php
 
-frankenphp_queue('Hello, Kévin!');
+pogo_queue('Hello, Kévin!');
 
 echo 'Data dispatched to an async worker.';
 ```

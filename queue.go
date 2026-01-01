@@ -15,14 +15,14 @@ import (
 	"log/slog"
 )
 
-// export_php:function frankenphp_queue(mixed $data): void
+// export_php:function pogo_queue(mixed $data): void
 func queue(data *C.zval) {
 	var length C.size_t
 	charPtr := C.extract_zval_string(data, &length)
 
 	if charPtr == nil {
 		if logger != nil {
-			logger.Error("frankenphp_queue: data must be a string")
+			logger.Error("pogo_queue: data must be a string")
 		}
 		return
 	}
@@ -36,9 +36,9 @@ func queue(data *C.zval) {
 
 	if w == nil {
 		if l != nil {
-			l.Error("frankenphp_queue: worker pool not initialized. Check your Caddyfile 'frankenphp_queue' configuration.")
+			l.Error("pogo_queue: worker pool not initialized. Check your Caddyfile 'pogo_queue' configuration.")
 		} else {
-			println("frankenphp_queue: worker pool not initialized")
+			println("pogo_queue: worker pool not initialized")
 		}
 		return
 	}
@@ -47,7 +47,7 @@ func queue(data *C.zval) {
 		_, err := w.SendMessage(context.Background(), payload, nil)
 
 		if err != nil && l != nil {
-			l.Error("frankenphp_queue: failed to send message", slog.Any("error", err))
+			l.Error("pogo_queue: failed to send message", slog.Any("error", err))
 		}
 	}(msg)
 }

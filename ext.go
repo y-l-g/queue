@@ -13,7 +13,7 @@ func init() {
 	frankenphp.RegisterExtension(unsafe.Pointer(&C.queue_module_entry))
 }
 
-//export frankenphp_queue
-func frankenphp_queue(data *C.zval) {
+//export pogo_queue
+func pogo_queue(data *C.zval) {
 	queue(data)
 }

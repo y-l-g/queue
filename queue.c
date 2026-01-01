@@ -21,7 +21,7 @@ zend_module_entry queue_module_entry = {STANDARD_MODULE_HEADER,
                                         "1.0.0",          /* Version */
                                         STANDARD_MODULE_PROPERTIES};
 
-PHP_FUNCTION(frankenphp_queue) {
+PHP_FUNCTION(pogo_queue) {
   zval *data = NULL;
 
   ZEND_PARSE_PARAMETERS_START(1, 1)

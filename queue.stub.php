@@ -2,4 +2,6 @@
 
 /** @generate-class-entries */
 
-function frankenphp_queue(mixed $data): void {}
+function pogo_queue(mixed $data): void
+{
+}
