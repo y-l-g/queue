@@ -32,26 +32,25 @@ That's all! Your custom FrankenPHP build contains the `frankenphp-queue` extensi
 
 ## Usage
 
-
 ### Register The Queue
 
 Register the queue in your `Caddyfile`:
 
 ```caddyfile
 {
-	frankenphp
-	frankenphp_queue {
- 		# All directives are optional
- 		worker queue-worker.php
- 		name m#Queue
- 		size 10000
- 		min_threads 32 # defaults to the number of CPUs of the machine
+    frankenphp
+    frankenphp_queue {
+        # All directives are optional
+        worker queue-worker.php
+        name m#Queue
+        size 10000
+        min_threads 32 # defaults to the number of CPUs of the machine
     }
 }
 
 localhost {
     root public/
-	php_server
+    php_server
 }
 ```
 
@@ -63,8 +62,8 @@ localhost {
 // queue-worker.php
 
 // Handler outside the loop for better performance (doing less work)
-$handler = static function (mixed $data)  {
-    // Your logic here	
+$handler = static function (mixed $data) : void {
+    // Your logic here
 };
 
 $maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
@@ -75,7 +74,7 @@ for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests
     gc_collect_cycles();
 
     if (!$keepRunning) {
-      break;
+        break;
     }
 }
 ```
@@ -92,16 +91,6 @@ frankenphp_queue('Hello, Kévin!');
 echo 'Data dispatched to an async worker.';
 ```
 
-## Symfony Messenger Transport
-
-Transport for Symfony Messenger is provided in tests,
-it will be contributed to Symfony when the extension will be more mature.
-
-* [`Caddyfile`](testdata/symfony-messenger/Caddyfile)
-* [`queue-worker.php`](testdata/symfony-messenger/queue-worker.php)
-* [`FrankenPHPQueueTransportFactory`](testdata/symfony-messenger/src/Transport/FrankenPHPQueueTransportFactory.php)
-* [`FrankenPHPQueueTransport`](testdata/symfony-messenger/src/Transport/FrankenPHPQueueTransport.php)
-
 ## Credits
 
-This project is an evolution of the original [`frankenphp-queue`](https://github.com/dunglas/frankenphp-queue) project by [Kévin Dunglas](https://dunglas.dev).
+This project is an evolution of the original [frankenphp-queue](https://github.com/dunglas/frankenphp-queue) project by [Kévin Dunglas](https://dunglas.dev).
