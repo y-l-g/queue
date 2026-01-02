@@ -31,7 +31,9 @@ func TestQueueEndToEnd(t *testing.T) {
 		t.Fatalf("Failed to listen on ephemeral port: %v", err)
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
-	listener.Close()
+	if err := listener.Close(); err != nil {
+		t.Fatalf("Failed to close listener: %v", err)
+	}
 
 	workerPath := filepath.Join(testDir, "worker.php")
 
@@ -40,9 +42,17 @@ func TestQueueEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	outputFile := tmpOut.Name()
-	tmpOut.Close()
-	os.Remove(outputFile)
-	defer os.Remove(outputFile)
+	if err := tmpOut.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
+	if err := os.Remove(outputFile); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("Failed to remove output file: %v", err)
+	}
+	defer func() {
+		if err := os.Remove(outputFile); err != nil && !os.IsNotExist(err) {
+			t.Logf("Warning: failed to remove output file: %v", err)
+		}
+	}()
 
 	caddyfileContent := fmt.Sprintf(`
 	{
@@ -66,12 +76,18 @@ func TestQueueEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp Caddyfile: %v", err)
 	}
-	defer os.Remove(tmpCaddyfile.Name())
+	defer func() {
+		if err := os.Remove(tmpCaddyfile.Name()); err != nil {
+			t.Logf("Warning: failed to remove temp Caddyfile: %v", err)
+		}
+	}()
 
 	if _, err := tmpCaddyfile.WriteString(caddyfileContent); err != nil {
 		t.Fatalf("Failed to write temp Caddyfile: %v", err)
 	}
-	tmpCaddyfile.Close()
+	if err := tmpCaddyfile.Close(); err != nil {
+		t.Fatalf("Failed to close temp Caddyfile: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -87,7 +103,9 @@ func TestQueueEndToEnd(t *testing.T) {
 
 	defer func() {
 		cancel()
-		cmd.Wait()
+		if err := cmd.Wait(); err != nil && err.Error() != "signal: killed" {
+			t.Logf("Command wait error: %v", err)
+		}
 	}()
 
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
@@ -103,7 +121,11 @@ func TestQueueEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to send POST request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Logf("Warning: failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
@@ -143,7 +165,9 @@ func waitForServer(url string) bool {
 	for i := 0; i < 50; i++ {
 		resp, err := http.Get(url)
 		if err == nil {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				return false
+			}
 			return true
 		}
 		time.Sleep(100 * time.Millisecond)
