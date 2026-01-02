@@ -5,7 +5,6 @@ A [FrankenPHP](https://frankenphp.dev) extension that allows you to send message
 It is designed as a lightweight, in-process replacement for queue systems like RabbitMQ or Redis, ideal for high-performance setups where simplicity is key.
 
 > [!WARNING]
->
 > This extension is an in-memory queue. Data is **volatile**: if the server crashes or restarts, pending jobs are lost.
 
 ## Installation
