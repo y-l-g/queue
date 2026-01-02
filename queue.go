@@ -1,53 +1,91 @@
 package queue
 
-// #include <stdlib.h>
-// #include <string.h>
-// #include <Zend/zend.h>
-//
-// char* extract_zval_string(zval* val, size_t* len) {
-//     if (Z_TYPE_P(val) != IS_STRING) return NULL;
-//     *len = Z_STRLEN_P(val);
-//     return Z_STRVAL_P(val);
-// }
-import "C"
 import (
+	"C"
 	"context"
 	"log/slog"
+	"sync"
+	"time"
+
+	"github.com/dunglas/frankenphp"
 )
 
-// export_php:function pogo_queue(mixed $data): void
-func queue(data *C.zval) {
-	var length C.size_t
-	charPtr := C.extract_zval_string(data, &length)
+type dispatcher struct {
+	worker frankenphp.Workers
+	logger *slog.Logger
+	queue  chan string
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+	once   sync.Once
+}
 
-	if charPtr == nil {
-		if logger != nil {
-			logger.Error("pogo_queue: data must be a string")
-		}
-		return
+func newDispatcher(w frankenphp.Workers, l *slog.Logger, size int) *dispatcher {
+	ctx, cancel := context.WithCancel(context.Background())
+	d := &dispatcher{
+		worker: w,
+		logger: l,
+		queue:  make(chan string, size),
+		ctx:    ctx,
+		cancel: cancel,
 	}
 
+	d.wg.Add(1)
+	go d.loop()
+
+	return d
+}
+
+func (d *dispatcher) loop() {
+	defer d.wg.Done()
+
+	for {
+		select {
+		case msg := <-d.queue:
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_, err := d.worker.SendMessage(ctx, msg, nil)
+			cancel()
+
+			if err != nil {
+				d.logger.Error("pogo_queue: failed to send message to worker", slog.Any("error", err))
+			}
+		case <-d.ctx.Done():
+			return
+		}
+	}
+}
+
+func (d *dispatcher) shutdown() {
+	d.once.Do(func() {
+		d.cancel()
+		d.wg.Wait()
+	})
+}
+
+func (d *dispatcher) trySend(msg string) bool {
+	select {
+	case d.queue <- msg:
+		return true
+	default:
+		d.logger.Warn("pogo_queue: buffer full, dropping message")
+		return false
+	}
+}
+
+func dispatch(charPtr *C.char, length C.size_t) C.int {
 	msg := C.GoStringN(charPtr, C.int(length))
 
-	workerMu.Lock()
-	w := worker
-	l := logger
-	workerMu.Unlock()
+	globalDispatcherMu.RLock()
+	d := globalDispatcher
+	globalDispatcherMu.RUnlock()
 
-	if w == nil {
-		if l != nil {
-			l.Error("pogo_queue: worker pool not initialized. Check your Caddyfile 'pogo_queue' configuration.")
-		} else {
-			println("pogo_queue: worker pool not initialized")
-		}
-		return
+	if d == nil {
+		return 0
 	}
 
-	go func(payload string) {
-		_, err := w.SendMessage(context.Background(), payload, nil)
+	if d.trySend(msg) {
+		return 1
+	}
 
-		if err != nil && l != nil {
-			l.Error("pogo_queue: failed to send message", slog.Any("error", err))
-		}
-	}(msg)
+	return 0
 }

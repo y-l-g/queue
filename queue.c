@@ -1,32 +1,37 @@
-#include <Zend/zend_API.h>
-#include <Zend/zend_hash.h>
-#include <Zend/zend_types.h>
 #include <php.h>
-#include <stddef.h>
-
+#include <Zend/zend_exceptions.h>
 #include "_cgo_export.h"
 #include "queue.h"
 #include "queue_arginfo.h"
 
 PHP_MINIT_FUNCTION(queue) { return SUCCESS; }
 
-zend_module_entry queue_module_entry = {STANDARD_MODULE_HEADER,
-                                        "queue",
-                                        ext_functions,    /* Functions */
-                                        PHP_MINIT(queue), /* MINIT */
-                                        NULL,             /* MSHUTDOWN */
-                                        NULL,             /* RINIT */
-                                        NULL,             /* RSHUTDOWN */
-                                        NULL,             /* MINFO */
-                                        "1.0.0",          /* Version */
-                                        STANDARD_MODULE_PROPERTIES};
+zend_module_entry queue_module_entry = {
+    STANDARD_MODULE_HEADER,
+    "queue",
+    ext_functions,
+    PHP_MINIT(queue),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    "1.0.0",
+    STANDARD_MODULE_PROPERTIES
+};
 
 PHP_FUNCTION(pogo_queue) {
-  zval *data = NULL;
+    zval *data;
+    zend_string *str;
 
-  ZEND_PARSE_PARAMETERS_START(1, 1)
-  Z_PARAM_ZVAL(data)
-  ZEND_PARSE_PARAMETERS_END();
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_ZVAL(data)
+    ZEND_PARSE_PARAMETERS_END();
 
-  pogo_queue(data);
+    str = zval_get_string(data);
+
+    int ret = pogo_dispatch(ZSTR_VAL(str), ZSTR_LEN(str));
+
+    zend_string_release(str);
+
+    RETURN_BOOL(ret);
 }

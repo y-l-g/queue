@@ -1,7 +1,6 @@
 package queue
 
 import (
-	"log/slog"
 	"strconv"
 	"sync"
 
@@ -9,14 +8,12 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
-	"github.com/dunglas/frankenphp"
 	frankenphpCaddy "github.com/dunglas/frankenphp/caddy"
 )
 
 var (
-	worker   frankenphp.Workers
-	logger   *slog.Logger
-	workerMu sync.Mutex
+	globalDispatcher   *dispatcher
+	globalDispatcherMu sync.RWMutex
 )
 
 func init() {
@@ -29,9 +26,10 @@ type Queue struct {
 	NumThreads int    `json:"numthreads,omitempty"`
 	Name       string `json:"name,omitempty"`
 	Worker     string `json:"worker,omitempty"`
+
+	dispatcher *dispatcher
 }
 
-// CaddyModule returns the Caddy module information.
 func (Queue) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "pogo_queue",
@@ -52,10 +50,29 @@ func (g *Queue) Provision(ctx caddy.Context) error {
 		g.Worker = "queue-worker.php"
 	}
 
-	workerMu.Lock()
-	worker = frankenphpCaddy.RegisterWorkers(g.Name, g.Worker, g.NumThreads)
-	logger = ctx.Slogger()
-	workerMu.Unlock()
+	w := frankenphpCaddy.RegisterWorkers(g.Name, g.Worker, g.NumThreads)
+	g.dispatcher = newDispatcher(w, ctx.Slogger(), g.Size)
+
+	globalDispatcherMu.Lock()
+	if globalDispatcher != nil {
+		go globalDispatcher.shutdown()
+	}
+	globalDispatcher = g.dispatcher
+	globalDispatcherMu.Unlock()
+
+	return nil
+}
+
+func (g *Queue) Cleanup() error {
+	if g.dispatcher != nil {
+		g.dispatcher.shutdown()
+	}
+
+	globalDispatcherMu.Lock()
+	if globalDispatcher == g.dispatcher {
+		globalDispatcher = nil
+	}
+	globalDispatcherMu.Unlock()
 
 	return nil
 }
@@ -83,7 +100,7 @@ func (g *Queue) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.Errf("failed to parse size: %v", err)
 				}
 				g.Size = s
-			case "num_threads":
+			case "num_threads", "min_threads":
 				if !d.NextArg() {
 					return d.ArgErr()
 				}
@@ -114,5 +131,7 @@ func parseGlobalOption(d *caddyfile.Dispenser, _ any) (any, error) {
 }
 
 var (
-	_ caddy.Module = (*Queue)(nil)
+	_ caddy.Module       = (*Queue)(nil)
+	_ caddy.Provisioner  = (*Queue)(nil)
+	_ caddy.CleanerUpper = (*Queue)(nil)
 )

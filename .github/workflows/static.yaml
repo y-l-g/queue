@@ -53,7 +53,7 @@ jobs:
           echo "CGO_CFLAGS=-D_GNU_SOURCE $(php-config --includes)" >> $GITHUB_ENV
           echo "CGO_LDFLAGS=$(php-config --ldflags) $(php-config --libs)" >> $GITHUB_ENV
 
-      - name: Build Custom FrankenPHP
+      - name: Build Custom FrankenPHP Binary
         env:
           XCADDY_GO_BUILD_FLAGS: "-ldflags='-w -s' -tags=nobadger,nomysql,nopgx,nowatcher"
         run: |
@@ -63,11 +63,12 @@ jobs:
             --with github.com/dunglas/frankenphp/caddy \
             --with github.com/dunglas/caddy-cbrotli
 
-      - name: Run Go Tests
+      - name: Run Tests (Unit & E2E)
         env:
           GOFLAGS: "-tags=nobadger,nomysql,nopgx,nowatcher"
         run: |
-          go test -v -race .
+          cp frankenphp-linux-x86_64 frankenphp
+          go test -v -race ./tests/...
 
       - name: Upload Binary as Artifact
         uses: actions/upload-artifact@v4

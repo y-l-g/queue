@@ -2,18 +2,16 @@
 
 A [FrankenPHP](https://frankenphp.dev) extension that allows you to send messages in queues and handle them asynchronously.
 
-It can be used as a lightweight, in-process replacement for queues systems like RabbitMQ, Beanstalkd and Redis
-and can be used with [Symfony Messenger](https://symfony.com/doc/current/messenger.html) and [Laravel Queues](https://laravel.com/docs/12.x/queues).
+It is designed as a lightweight, in-process replacement for queue systems like RabbitMQ or Redis, ideal for high-performance setups where simplicity is key.
 
 > [!WARNING]
 >
-> This extension is highly experimental and not recommended for production use.
-> The public API may change at any time without notice.
+> This extension is an in-memory queue. Data is **volatile**: if the server crashes or restarts, pending jobs are lost.
 
 ## Installation
 
-First, if not already done, follow [the instructions to install a ZTS version of libphp and `xcaddy`](https://frankenphp.dev/docs/compile/#install-php).
-Then, use [`xcaddy`](https://github.com/caddyserver/xcaddy) to build FrankenPHP with the `frankenphp-etcd` module:
+Follow [the instructions to install a ZTS version of libphp and `xcaddy`](https://frankenphp.dev/docs/compile/#install-php).
+Then, use [`xcaddy`](https://github.com/caddyserver/xcaddy) to build FrankenPHP with the `pogo-queue` module:
 
 ```console
 CGO_ENABLED=1 \
@@ -21,30 +19,25 @@ CGO_CFLAGS=$(php-config --includes) \
 CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
 xcaddy build \
     --output frankenphp \
-    --with github.com/y-l-g/queue \
+    --with github.com/y-l-g/queue=. \
     --with github.com/dunglas/frankenphp/caddy \
-    --with github.com/dunglas/mercure/caddy \
-    --with github.com/dunglas/vulcain/caddy
-    # Add extra Caddy modules and FrankenPHP extensions here
+    --with github.com/dunglas/caddy-cbrotli
 ```
-
-That's all! Your custom FrankenPHP build contains the `pogo-queue` extension.
 
 ## Usage
 
 ### Register The Queue
 
-Register the queue in your `Caddyfile`:
+Register the queue in your `Caddyfile`. You can control the buffer size (`size`) to handle backpressure.
 
 ```caddyfile
 {
     frankenphp
     pogo_queue {
-        # All directives are optional
         worker queue-worker.php
         name m#Queue
-        size 10000
-        min_threads 32 # defaults to the number of CPUs of the machine
+        size 10000       # Size of the in-memory buffer. If full, pogo_queue returns false.
+        num_threads 32   # Number of concurrent workers (defaults to CPU count)
     }
 }
 
@@ -56,41 +49,43 @@ localhost {
 
 ### Write The Worker Script
 
+Your worker script receives the message as the first argument of the handler.
+
 ```php
 <?php
-
 // queue-worker.php
 
-// Handler outside the loop for better performance (doing less work)
-$handler = static function (mixed $data) : void {
-    // Your logic here
+$handler = static function ($message) {
+    if ($message === null) {
+        return;
+    }
+    
+    // Process your message...
+    error_log("Processing: " . $message);
 };
 
 $maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
 for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests) {
     $keepRunning = \frankenphp_handle_request($handler);
-
-    // Call the garbage collector to reduce the chances of it being triggered in the middle of the handling of a request
     gc_collect_cycles();
-
-    if (!$keepRunning) {
-        break;
-    }
+    if (!$keepRunning) break;
 }
 ```
 
 ### Dispatch Messages
 
+The `pogo_queue` function returns a `bool` indicating if the message was successfully buffered.
+
 ```php
 <?php
-
 // public/index.php
 
-pogo_queue('Hello, Kévin!');
+$success = pogo_queue('Hello, Kévin!');
 
-echo 'Data dispatched to an async worker.';
-```
-
-## Credits
-
-This project is an evolution of the original [frankenphp-queue](https://github.com/dunglas/frankenphp-queue) project by [Kévin Dunglas](https://dunglas.dev).
+if ($success) {
+    echo 'Data dispatched to an async worker.';
+} else {
+    // The queue is full or the worker is not running.
+    http_response_code(503);
+    echo 'Queue is full.';
+}

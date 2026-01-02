@@ -1,7 +1,9 @@
 package queue
 
-// #include <stdlib.h>
-// #include "queue.h"
+/*
+#include <stdlib.h>
+#include "queue.h"
+*/
 import "C"
 import (
 	"unsafe"
@@ -13,7 +15,7 @@ func init() {
 	frankenphp.RegisterExtension(unsafe.Pointer(&C.queue_module_entry))
 }
 
-//export pogo_queue
-func pogo_queue(data *C.zval) {
-	queue(data)
+//export pogo_dispatch
+func pogo_dispatch(msg *C.char, length C.size_t) C.int {
+	return dispatch(msg, length)
 }
