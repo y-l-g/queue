@@ -4,13 +4,13 @@ A [FrankenPHP](https://frankenphp.dev) extension and Laravel driver that allows 
 
 It is designed as a lightweight, **in-memory** replacement for queue systems like RabbitMQ or Redis, ideal for high-performance setups where simplicity is key.
 
-[!WARNING]
-**VOLATILE DATA**: This is an in-memory queue.
-
+> [!WARNING]
+>
+> **VOLATILE DATA**: This is an in-memory queue.
+>
 > * If the server crashes or restarts, **all pending jobs are lost**.
 > * Do not use this for critical financial transactions or data that cannot be regenerated.
-
-[!WARNING]
+>
 > **NO DELAYS**: This driver does not support delayed jobs (e.g., `dispatch()->delay(...)`).
 > Attempting to dispatch a delayed job will throw a `BadMethodCallException`.
 
