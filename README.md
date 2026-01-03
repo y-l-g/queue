@@ -1,13 +1,22 @@
 # FrankenPHP Queue
 
-A [FrankenPHP](https://frankenphp.dev) extension that allows you to send messages in queues and handle them asynchronously.
+A [FrankenPHP](https://frankenphp.dev) extension and Laravel driver that allows you to send messages in queues and handle them asynchronously.
 
-It is designed as a lightweight, in-process replacement for queue systems like RabbitMQ or Redis, ideal for high-performance setups where simplicity is key.
+It is designed as a lightweight, **in-memory** replacement for queue systems like RabbitMQ or Redis, ideal for high-performance setups where simplicity is key.
 
-> [!WARNING]
-> This extension is an in-memory queue. Data is **volatile**: if the server crashes or restarts, pending jobs are lost.
+[!WARNING]
+**VOLATILE DATA**: This is an in-memory queue.
+
+> * If the server crashes or restarts, **all pending jobs are lost**.
+> * Do not use this for critical financial transactions or data that cannot be regenerated.
+
+[!WARNING]
+> **NO DELAYS**: This driver does not support delayed jobs (e.g., `dispatch()->delay(...)`).
+> Attempting to dispatch a delayed job will throw a `BadMethodCallException`.
 
 ## Installation
+
+### 1. Build the Binary
 
 Follow [the instructions to install a ZTS version of libphp and `xcaddy`](https://frankenphp.dev/docs/compile/#install-php).
 Then, use [`xcaddy`](https://github.com/caddyserver/xcaddy) to build FrankenPHP with the `pogo-queue` module:
@@ -18,16 +27,44 @@ CGO_CFLAGS=$(php-config --includes) \
 CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
 xcaddy build \
     --output frankenphp \
-    --with github.com/y-l-g/queue=. \
+    --with github.com/y-l-g/queue \
     --with github.com/dunglas/frankenphp/caddy \
     --with github.com/dunglas/caddy-cbrotli
 ```
 
-## Usage
+### 2. Install the Laravel Package
 
-### Register The Queue
+```bash
+composer require pogo/queue
+```
 
-Register the queue in your `Caddyfile`. You can control the buffer size (`size`) to handle backpressure.
+### 3. Install Configuration
+
+```bash
+php artisan pogo:queue:install
+```
+
+This command will:
+
+1. Publish `public/queue-worker.php` (The entry point for the worker).
+2. Create a `Caddyfile` example.
+3. Update your `.env` to set `QUEUE_CONNECTION=pogo`.
+
+**Manual Step**: You must add the following configuration to `config/queue.php` in the `connections` array:
+
+```php
+'pogo' => [
+    'driver' => 'pogo',
+    'queue' => env('POGO_QUEUE', 'default'),
+    'retry_after' => 90,
+],
+```
+
+## Configuration
+
+### Caddyfile (Server Side)
+
+Configure the memory buffer and worker threads in your `Caddyfile`.
 
 ```caddyfile
 {
@@ -35,56 +72,43 @@ Register the queue in your `Caddyfile`. You can control the buffer size (`size`)
     pogo_queue {
         worker queue-worker.php
         name m#Queue
-        size 10000       # Size of the in-memory buffer. If full, pogo_queue returns false.
-        num_threads 32   # Number of concurrent workers (defaults to CPU count)
+        size 10000       # Max jobs in memory. If full, dispatch throws QueueFullException.
+        num_threads 32   # Number of concurrent workers (defaults to CPU count).
     }
-}
-
-localhost {
-    root public/
-    php_server
 }
 ```
 
-### Write The Worker Script
+### Laravel (Application Side)
 
-Your worker script receives the message as the first argument of the handler.
+You can configure the connection and queue name using environment variables.
+
+* `QUEUE_CONNECTION=pogo`
+* `POGO_QUEUE=default` (Optional, defaults to 'default')
+
+## Handling Backpressure
+
+Since the queue has a fixed size (defined in `Caddyfile`), it can fill up if workers are slower than producers.
+
+**Unlike Redis, this driver throws an exception immediately when full.**
 
 ```php
-<?php
-// queue-worker.php
+use Pogo\Queue\Exceptions\QueueFullException;
+use App\Jobs\ProcessData;
 
-$handler = static function ($message) {
-    if ($message === null) {
-        return;
-    }
+try {
+    ProcessData::dispatch($data);
+} catch (QueueFullException $e) {
+    // The buffer is full.
+    // 1. Return a 503 Service Unavailable
+    abort(503, 'Server is busy, please try again later.');
     
-    // Process your message...
-    error_log("Processing: " . $message);
-};
-
-$maxRequests = (int)($_SERVER['MAX_REQUESTS'] ?? 0);
-for ($nbRequests = 0; !$maxRequests || $nbRequests < $maxRequests; ++$nbRequests) {
-    $keepRunning = \frankenphp_handle_request($handler);
-    gc_collect_cycles();
-    if (!$keepRunning) break;
+    // 2. Or fallback to a database driver
+    // ProcessData::dispatch($data)->onConnection('database');
 }
 ```
 
-### Dispatch Messages
+## Limitations
 
-The `pogo_queue` function returns a `bool` indicating if the message was successfully buffered.
-
-```php
-<?php
-// public/index.php
-
-$success = pogo_queue('Hello, Kévin!');
-
-if ($success) {
-    echo 'Data dispatched to an async worker.';
-} else {
-    // The queue is full or the worker is not running.
-    http_response_code(503);
-    echo 'Queue is full.';
-}
+1. **No Persistence**: Data is in RAM. Restart = Data Loss.
+2. **No Delays**: `later()` and `delay()` are not supported and will throw an exception.
+3. **No Size Inspection**: `Queue::size()` currently returns `0` as the extension does not expose metrics yet.

@@ -59,7 +59,7 @@ jobs:
         run: |
           xcaddy build \
             --output frankenphp-linux-x86_64 \
-            --with github.com/y-l-g/queue=. \
+            --with github.com/y-l-g/queue/module=./module \
             --with github.com/dunglas/frankenphp/caddy \
             --with github.com/dunglas/caddy-cbrotli
 
@@ -68,7 +68,9 @@ jobs:
           GOFLAGS: "-tags=nobadger,nomysql,nopgx,nowatcher"
         run: |
           cp frankenphp-linux-x86_64 frankenphp
+          cd module
           go test -v -race ./tests/...
+          cd ../
 
       - name: Upload Binary as Artifact
         uses: actions/upload-artifact@v4
