@@ -67,7 +67,7 @@ jobs:
         env:
           GOFLAGS: "-tags=nobadger,nomysql,nopgx,nowatcher"
         run: |
-          cp frankenphp-linux-x86_64 frankenphp
+          cp frankenphp-linux-x86_64 module/frankenphp
           cd module
           go test -v -race ./tests/...
           cd ../
