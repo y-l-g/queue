@@ -17,9 +17,15 @@ class PogoQueue extends Queue implements QueueContract
 
     public function push($job, $data = '', $queue = null)
     {
-        return $this->pushRaw($this->createPayload($job, $queue, $data), $queue);
+        return $this->pushRaw($this->createPayload($job, $queue ?? 'default', $data), $queue);
     }
 
+    /**
+     * @param string $payload
+     * @param string|null $queue
+     * @param array<mixed> $options
+     * @return mixed
+     */
     public function pushRaw($payload, $queue = null, array $options = [])
     {
         if (!function_exists('pogo_queue')) {
@@ -31,12 +37,6 @@ class PogoQueue extends Queue implements QueueContract
         }
     }
 
-    /**
-     * Dispatch the payload to the FrankenPHP extension.
-     *
-     * @param string $payload
-     * @return bool
-     */
     protected function dispatchToExtension(string $payload): bool
     {
         return \pogo_queue($payload);

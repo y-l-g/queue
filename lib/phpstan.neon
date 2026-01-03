@@ -1,0 +1,9 @@
+parameters:
+    level: 10
+    paths:
+        - src/PogoConnector.php
+        - src/PogoJob.php
+        - src/PogoQueue.php
+        - src/PogoQueueServiceProvider.php
+    scanFiles:
+        - queue.stub.php

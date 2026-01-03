@@ -27,10 +27,12 @@ CGO_CFLAGS=$(php-config --includes) \
 CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
 xcaddy build \
     --output frankenphp \
-    --with github.com/y-l-g/queue \
+    --with github.com/y-l-g/queue/module \
     --with github.com/dunglas/frankenphp/caddy \
     --with github.com/dunglas/caddy-cbrotli
 ```
+
+Or simply use the binary or the docker image provided by this repo.
 
 ### 2. Install the Laravel Package
 
@@ -47,7 +49,7 @@ php artisan pogo:queue:install
 This command will:
 
 1. Publish `public/queue-worker.php` (The entry point for the worker).
-2. Create a `Caddyfile` example.
+2. Create a `Caddyfile` example (an adapted copy of the official octane Caddyfile).
 3. Update your `.env` to set `QUEUE_CONNECTION=pogo`.
 
 **Manual Step**: You must add the following configuration to `config/queue.php` in the `connections` array:
@@ -84,6 +86,12 @@ You can configure the connection and queue name using environment variables.
 
 * `QUEUE_CONNECTION=pogo`
 * `POGO_QUEUE=default` (Optional, defaults to 'default')
+
+## Run it
+
+```bash
+php artisan octane:frankenphp --caddyfile=Caddyfile
+```
 
 ## Handling Backpressure
 

@@ -8,10 +8,10 @@ use Pogo\Queue\Console\InstallCommand;
 
 class PogoQueueServiceProvider extends ServiceProvider
 {
-    public function boot()
+    public function boot(): void
     {
         Queue::extend('pogo', function () {
-            return new PogoConnector;
+            return new PogoConnector();
         });
 
         if ($this->app->runningInConsole()) {

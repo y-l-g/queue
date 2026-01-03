@@ -8,9 +8,10 @@ use Illuminate\Queue\Jobs\Job;
 
 class PogoJob extends Job implements JobContract
 {
-    protected $payload;
+    protected string $payload;
+    protected PogoQueue $connection;
 
-    public function __construct(Container $container, PogoQueue $connection, $payload, $queue)
+    public function __construct(Container $container, PogoQueue $connection, string $payload, string $queue)
     {
         $this->container = $container;
         $this->connection = $connection;
@@ -20,7 +21,10 @@ class PogoJob extends Job implements JobContract
 
     public function getJobId()
     {
-        return json_decode($this->payload, true)['id'] ?? null;
+        $decoded = json_decode($this->payload, true);
+        $id = is_array($decoded) ? ($decoded['id'] ?? null) : null;
+
+        return (is_string($id) || is_int($id)) ? $id : null;
     }
 
     public function getRawBody()
@@ -30,6 +34,9 @@ class PogoJob extends Job implements JobContract
 
     public function attempts()
     {
-        return json_decode($this->payload, true)['attempts'] ?? 1;
+        $decoded = json_decode($this->payload, true);
+        $attempts = is_array($decoded) ? ($decoded['attempts'] ?? 1) : 1;
+
+        return is_numeric($attempts) ? (int) $attempts : 1;
     }
 }
