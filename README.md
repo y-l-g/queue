@@ -34,25 +34,70 @@ xcaddy build \
 
 Or simply use the binary or the docker image provided by this repo.
 
-### 2. Install the Laravel Package
+### 2. Install
 
 ```bash
 composer require pogo/queue
-```
-
-### 3. Install Configuration
-
-```bash
 php artisan pogo:queue:install
 ```
 
-This command will:
+Add the `pogo_queue` block to your Global Options in the `Caddyfile`. This is an adapted copy of the official octane caddyfile.
 
-1. Publish `public/queue-worker.php` (The entry point for the worker).
-2. Create a `Caddyfile` example (an adapted copy of the official octane Caddyfile).
-3. Update your `.env` to set `QUEUE_CONNECTION=pogo`.
+```caddyfile
+{
+    {$CADDY_GLOBAL_OPTIONS}
 
-**Manual Step**: You must add the following configuration to `config/queue.php` in the `connections` array:
+    admin {$CADDY_SERVER_ADMIN_HOST}:{$CADDY_SERVER_ADMIN_PORT}
+
+    frankenphp {
+        worker {
+            file "{$APP_PUBLIC_PATH}/frankenphp-worker.php"
+            {$CADDY_SERVER_WORKER_DIRECTIVE}
+            {$CADDY_SERVER_WATCH_DIRECTIVES}
+        }
+    }
+    pogo_queue {
+        worker {$APP_PUBLIC_PATH}/queue-worker.php
+        name m#Queue
+        size 10000       # Max jobs in memory. If full, dispatch throws QueueFullException.
+        num_threads 32   # Number of concurrent workers (defaults to CPU count).
+    }
+}
+
+{$CADDY_EXTRA_CONFIG}
+
+{$CADDY_SERVER_SERVER_NAME} {
+    log {
+        level {$CADDY_SERVER_LOG_LEVEL}
+
+    # Redact the authorization query parameter that can be set by Mercure...
+        format filter {
+            wrap {$CADDY_SERVER_LOGGER}
+            fields {
+                uri query {
+                    replace authorization REDACTED
+                }
+            }
+        }
+    }
+    route {
+        root * "{$APP_PUBLIC_PATH}"
+        encode zstd br gzip
+
+        # Mercure configuration is injected here...
+        {$CADDY_SERVER_EXTRA_DIRECTIVES}
+
+        php_server {
+            index frankenphp-worker.php
+            try_files {path} frankenphp-worker.php
+            # Required for the public/storage/ directory...
+            resolve_root_symlink
+        }
+    }
+}
+```
+
+Add the following configuration to `config/queue.php` in the `connections` array:
 
 ```php
 'pogo' => [
@@ -62,32 +107,12 @@ This command will:
 ],
 ```
 
-## Configuration
-
-### Caddyfile (Server Side)
-
-Configure the memory buffer and worker threads in your `Caddyfile`.
-
-```caddyfile
-{
-    frankenphp
-    pogo_queue {
-        worker queue-worker.php
-        name m#Queue
-        size 10000       # Max jobs in memory. If full, dispatch throws QueueFullException.
-        num_threads 32   # Number of concurrent workers (defaults to CPU count).
-    }
-}
-```
-
-### Laravel (Application Side)
-
 You can configure the connection and queue name using environment variables.
 
 * `QUEUE_CONNECTION=pogo`
 * `POGO_QUEUE=default` (Optional, defaults to 'default')
 
-## Run it
+Run octane with the adapted caddyfile
 
 ```bash
 php artisan octane:frankenphp --caddyfile=Caddyfile
