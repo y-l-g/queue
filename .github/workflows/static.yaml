@@ -76,7 +76,7 @@ jobs:
         run: composer install --prefer-dist --no-progress
 
       - name: Run PHP Tests via FrankenPHP
-        run: ./frankenphp-linux-x86_64 php-cli ./vendor/bin/phpunit -c lib/phpunit.xml lib
+        run: ./frankenphp-linux-x86_64 php-cli ./vendor/bin/phpunit -c lib/phpunit.xml.dist lib
 
       - name: Run PHPStan (Static Analysis)
         run: ./vendor/bin/phpstan analyze --configuration=lib/phpstan.neon --error-format=github
