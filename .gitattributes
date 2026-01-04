@@ -8,6 +8,6 @@ README.md export-ignore
 examples export-ignore 
 Dockerfile export-ignore
 
-mod export-ignore
+module export-ignore
 
 
