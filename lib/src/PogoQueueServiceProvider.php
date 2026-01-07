@@ -4,7 +4,6 @@ namespace Pogo\Queue;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Queue;
-use Pogo\Queue\Console\InstallCommand;
 
 class PogoQueueServiceProvider extends ServiceProvider
 {
@@ -14,10 +13,10 @@ class PogoQueueServiceProvider extends ServiceProvider
             return new PogoConnector();
         });
 
-        if ($this->app->runningInConsole()) {
-            $this->commands([
-                InstallCommand::class,
-            ]);
-        }
+        // if ($this->app->runningInConsole()) {
+        //     $this->commands([
+        //         InstallCommand::class,
+        //     ]);
+        // }
     }
 }
