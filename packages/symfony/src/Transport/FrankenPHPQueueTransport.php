@@ -16,8 +16,7 @@ class FrankenPHPQueueTransport implements TransportInterface
     public function __construct(
         private readonly PogoAdapter $adapter,
         private readonly SerializerInterface $serializer = new PhpSerializer(),
-    ) {
-    }
+    ) {}
 
     public function get(): iterable
     {
