@@ -76,10 +76,10 @@ jobs:
         run: composer install --prefer-dist --no-progress
 
       - name: Run Laravel Package Tests
-        run: ./frankenphp-linux-x86_64 php-cli ./vendor/bin/phpunit -c packages/laravel/phpunit.xml.dist
+        run: ./frankenphp-linux-x86_64 php-cli ./vendor/bin/phpunit -c packages/laravel/phpunit.xml.dist --bootstrap vendor/autoload.php
 
       - name: Run Symfony Package Tests
-        run: ./frankenphp-linux-x86_64 php-cli ./vendor/bin/phpunit -c packages/symfony/phpunit.xml.dist
+        run: ./frankenphp-linux-x86_64 php-cli ./vendor/bin/phpunit -c packages/symfony/phpunit.xml.dist --bootstrap vendor/autoload.php
 
       - name: Run PHPStan (Laravel)
         run: ./vendor/bin/phpstan analyze -c packages/laravel/phpstan.neon --error-format=github
