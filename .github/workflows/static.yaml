@@ -36,7 +36,7 @@ jobs:
         with:
           php-version: "8.5"
           extensions: mbstring, iconv, ctype, xml, dom, fileinfo, tokenizer, filter
-          tools: none
+          tools: composer:v2
         env:
           phpts: ts
 
@@ -61,11 +61,9 @@ jobs:
             --output frankenphp-linux-x86_64 \
             --with github.com/dunglas/frankenphp/caddy@main \
             --with github.com/dunglas/caddy-cbrotli@main \
-            --with github.com/y-l-g/queue/module=./module \
-            --with github.com/y-l-g/scheduler/module@main \
-            --with github.com/y-l-g/websocket/module@main
+            --with github.com/y-l-g/queue/module=./module
 
-      - name: Run Tests (Unit & E2E)
+      - name: Run Go Integration Tests
         env:
           GOFLAGS: "-tags=nobadger,nomysql,nopgx,nowatcher"
         run: |
@@ -74,14 +72,20 @@ jobs:
           go test -v -race ./tests/...
           cd ../
 
-      - name: Install PHP dependencies
+      - name: Install PHP dependencies (Root)
         run: composer install --prefer-dist --no-progress
 
-      - name: Run PHP Tests via FrankenPHP
-        run: ./frankenphp-linux-x86_64 php-cli ./vendor/bin/phpunit -c lib/phpunit.xml.dist lib
+      - name: Run Laravel Package Tests
+        run: ./frankenphp-linux-x86_64 php-cli ./vendor/bin/phpunit -c packages/laravel/phpunit.xml.dist
 
-      - name: Run PHPStan (Static Analysis)
-        run: ./vendor/bin/phpstan analyze --configuration=lib/phpstan.neon --error-format=github
+      - name: Run Symfony Package Tests
+        run: ./frankenphp-linux-x86_64 php-cli ./vendor/bin/phpunit -c packages/symfony/phpunit.xml.dist
+
+      - name: Run PHPStan (Laravel)
+        run: ./vendor/bin/phpstan analyze -c packages/laravel/phpstan.neon --error-format=github
+
+      - name: Run PHPStan (Symfony)
+        run: ./vendor/bin/phpstan analyze -c packages/symfony/phpstan.neon --error-format=github
 
       - name: Upload Binary as Artifact
         uses: actions/upload-artifact@v6

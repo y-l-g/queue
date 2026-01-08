@@ -1,32 +1,41 @@
 {
-  "name": "pogo/queue",
-  "description": "Pogo Queue Driver",
+  "name": "pogo/queue-monorepo",
+  "description": "Pogo Queue Drivers Monorepo",
+  "type": "project",
+  "license": "MIT",
+  "private": true,
   "require": {
-    "php": "^8.5",
-    "laravel/framework": "^12.44.0",
-    "laravel/octane": "^2.13.3"
+    "php": ">=8.2",
+    "laravel/framework": "^10.0 || ^11.0 || ^12.0",
+    "laravel/octane": "^2.0",
+    "symfony/config": "^6.4 || ^7.0",
+    "symfony/dependency-injection": "^6.4 || ^7.0",
+    "symfony/http-kernel": "^6.4 || ^7.0",
+    "symfony/messenger": "^6.4 || ^7.0"
   },
   "require-dev": {
-    "orchestra/testbench": "^10.8.0",
-    "phpunit/phpunit": "^12.5.4",
-    "friendsofphp/php-cs-fixer": "^3.92.3",
-    "phpstan/phpstan": "^2.1.33"
+    "orchestra/testbench": "^8.0 || ^9.0",
+    "phpunit/phpunit": "^10.0 || ^11.0",
+    "friendsofphp/php-cs-fixer": "^3.0",
+    "phpstan/phpstan": "^1.10",
+    "monorepo-php/monorepo": "^12.4"
   },
   "autoload": {
     "psr-4": {
-      "Pogo\\Queue\\": "lib/src/"
+      "Pogo\\Queue\\Laravel\\": "packages/laravel/src/",
+      "Pogo\\Queue\\Symfony\\": "packages/symfony/src/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "Pogo\\Queue\\Tests\\": "lib/tests/"
+      "Pogo\\Queue\\Laravel\\Tests\\": "packages/laravel/tests/",
+      "Pogo\\Queue\\Symfony\\Tests\\": "packages/symfony/tests/"
     }
   },
-  "extra": {
-    "laravel": {
-      "providers": [
-        "Pogo\\Queue\\PogoQueueServiceProvider"
-      ]
-    }
-  }
+  "replace": {
+    "pogo/laravel-queue": "self.version",
+    "pogo/symfony-queue": "self.version"
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
 }

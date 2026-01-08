@@ -1,0 +1,1 @@
+{"version":2,"defects":[],"times":{"Pogo\\Queue\\Symfony\\Tests\\Unit\\Transport\\FrankenPHPQueueTransportFactoryTest::testSupportsCorrectDsn":0.002,"Pogo\\Queue\\Symfony\\Tests\\Unit\\Transport\\FrankenPHPQueueTransportFactoryTest::testCreateTransport":0.005}}

@@ -1,0 +1,35 @@
+name: "Packages Split"
+
+on:
+  push:
+    tags:
+      - "*"
+
+env:
+  GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+
+jobs:
+  packages_split:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - local_path: "laravel"
+            split_repository: "laravel-queue"
+          - local_path: "symfony"
+            split_repository: "symfony-queue"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - if: "startsWith(github.ref, 'refs/tags/')"
+        uses: danharrin/monorepo-split-github-action@v2.4.0
+        with:
+          tag: ${GITHUB_REF#refs/tags/}
+          package_directory: "packages/${{ matrix.package.local_path }}"
+          repository_organization: "y-l-g"
+          repository_name: "${{ matrix.package.split_repository }}"
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"

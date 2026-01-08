@@ -90,7 +90,7 @@ use Laravel\Octane\ApplicationFactory;
 use Laravel\Octane\FrankenPhp\FrankenPhpClient;
 use Laravel\Octane\Worker;
 use Illuminate\Queue\WorkerOptions;
-use Pogo\Queue\PogoJob;
+use Pogo\Queue\Laravel\PogoJob;
 
 if ((!($_SERVER['FRANKENPHP_WORKER'] ?? false)) || !function_exists('frankenphp_handle_request')) {
     echo 'FrankenPHP must be in worker mode to use this script.';
@@ -243,7 +243,7 @@ Since the queue has a fixed size (defined in `Caddyfile` via the `size` directiv
 You should handle this exception in your code:
 
 ```php
-use Pogo\Queue\Exceptions\QueueFullException;
+use Pogo\Queue\Laravel\Exceptions\QueueFullException;
 use App\Jobs\ProcessData;
 
 try {
