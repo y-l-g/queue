@@ -8,10 +8,10 @@
     "php": ">=8.2",
     "laravel/framework": "^10.0 || ^11.0 || ^12.0",
     "laravel/octane": "^2.0",
-    "symfony/config": "^6.4 || ^7.0",
-    "symfony/dependency-injection": "^6.4 || ^7.0",
-    "symfony/http-kernel": "^6.4 || ^7.0",
-    "symfony/messenger": "^6.4 || ^7.0"
+    "symfony/config": "^6.4 || ^7.0 || ^8.0",
+    "symfony/dependency-injection": "^6.4 || ^7.0 || ^8.0",
+    "symfony/http-kernel": "^6.4 || ^7.0 || ^8.0",
+    "symfony/messenger": "^6.4 || ^7.0 || ^8.0"
   },
   "require-dev": {
     "orchestra/testbench": "^8.0 || ^9.0 || ^10.0",
