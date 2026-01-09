@@ -18,19 +18,6 @@ composer require pogo/symfony-queue
 
 ## Configuration
 
-### 1. Register the Transport Factory (Crucial for Symfony 8+)
-
-Open `config/services.yaml` and add the factory to the `services` section:
-
-```yaml
-services:
-    # ... other services ...
-
-    # Register the Pogo Transport Factory manually
-    Pogo\Queue\Symfony\Transport\FrankenPHPQueueTransportFactory:
-        tags: ['messenger.transport_factory']
-```
-
 ### 2. Configure Messenger
 
 Open `config/packages/messenger.yaml` and configure the transport.
@@ -43,6 +30,11 @@ framework:
             
         routing:
             'App\Message\YourMessage': pogo
+```
+
+in your .env
+
+```dotenv
 ```
 
 ## FrankenPHP Setup
@@ -135,12 +127,12 @@ You should see logs indicating that the worker has started:
 
 ### Troubleshooting & Known Limitations
 
-1.  **"No transport supports Messenger DSN..."**:
-    *   Ensure you have registered the `FrankenPHPQueueTransportFactory` in your `config/services.yaml`.
-    *   Ensure your DSN in `messenger.yaml` starts exactly with `pogo-queue://`.
+1. **"No transport supports Messenger DSN..."**:
+    * Ensure you have registered the `FrankenPHPQueueTransportFactory` in your `config/services.yaml`.
+    * Ensure your DSN in `messenger.yaml` starts exactly with `pogo-queue://`.
 
-2.  **Volatile Memory**:
-    *   **Warning:** This transport is in-memory. If you restart FrankenPHP, all pending messages in the queue are **lost**. Do not use this for critical data that must persist across restarts.
+2. **Volatile Memory**:
+    * **Warning:** This transport is in-memory. If you restart FrankenPHP, all pending messages in the queue are **lost**. Do not use this for critical data that must persist across restarts.
 
-3.  **Logs**:
-    *   The worker output (logs) will appear in the main FrankenPHP console window.
+3. **Logs**:
+    * The worker output (logs) will appear in the main FrankenPHP console window.
