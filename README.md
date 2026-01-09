@@ -1,33 +1,59 @@
 # FrankenPHP Queue
 
-A [FrankenPHP](https://frankenphp.dev) extension and Laravel driver that enables asynchronous message handling via queues.
+A [FrankenPHP](https://frankenphp.dev) extension that enables asynchronous message handling via high-performance, in-memory queues.
 
-Designed as a lightweight, **in-memory** replacement for systems like RabbitMQ or Redis, it is ideal for high-performance setups where simplicity is key and persistence is not required.
+Designed as a lightweight replacement for systems like RabbitMQ or Redis, it is ideal for high-performance setups where simplicity is key and persistence is not required.
+
+This repository contains the Go source code for the module, as well as the PHP drivers for **Laravel** (`pogo/queue`) and **Symfony** (`pogo/symfony-queue`).
+
+## Sommaire
+
+- [Installation (Global)](#installation-global)
+  - [Get the Binary](#get-the-binary)
+  - [Pre-built Binary or Docker (Recommended)](#pre-built-binary-or-docker-recommended)
+  - [Compile from Source](#compile-from-source)
+- [Usage with Laravel](#usage-with-laravel)
+  - [Install Dependencies](#install-dependencies)
+  - [Configure Environment](#configure-environment)
+  - [Configure Laravel](#configure-laravel)
+  - [Create Worker Script](#create-worker-script)
+  - [Configure Caddyfile](#configure-caddyfile)
+  - [Run Octane](#run-octane)
+  - [Handling Backpressure (Laravel)](#handling-backpressure-laravel)
+- [Usage with Symfony](#usage-with-symfony)
+  - [Requirements](#requirements)
+  - [Install Bundle](#install-bundle)
+  - [Register the Transport Factory (Crucial)](#register-the-transport-factory-crucial)
+  - [Configure Messenger](#configure-messenger)
+  - [Create Worker Script (Symfony)](#create-worker-script-symfony)
+  - [Configure Caddyfile (Symfony)](#configure-caddyfile-symfony)
+  - [Run FrankenPHP](#run-frankenphp)
+- [General Limitations](#general-limitations)
 
 > [!WARNING]
 >
 > **VOLATILE DATA**: This is an in-memory queue.
 >
-> * If the server crashes or restarts, **all pending jobs are lost**.
-> * **Do not use this** for critical financial transactions or data that cannot be regenerated.
+> - If the server crashes or restarts, **all pending jobs are lost**.
+> - **Do not use this** for critical financial transactions or data that cannot be regenerated.
 >
 > **NO DELAYS**: This driver does not support delayed jobs (e.g., `dispatch()->delay(...)`).
-> Attempting to dispatch a delayed job will throw a `BadMethodCallException`.
+> Attempting to dispatch a delayed job will throw a `BadMethodCallException` (Laravel) or result in immediate execution.
 
-## Installation
+## Installation (Global)
 
-### 1. Get the Binary
+### Get the Binary
 
-You have two options to get FrankenPHP with the queue module enabled:
+Regardless of the framework you use, you need a FrankenPHP binary with the `pogo_queue` module enabled.
 
-#### Option A: Pre-built Binary or Docker (Recommended)
+#### Pre-built Binary or Docker (Recommended)
 
 You can use the pre-compiled binaries or Docker images that already include the queue module.
 
-* **Binaries:** Download from [FrankenPHP with websocket, queue, and scheduler releases](https://github.com/y-l-g/websocket/releases).
-* **Docker:** Use the [docker image](https://github.com/y-l-g?tab=packages&repo_name=websocket).
+- **Binaries:** Download from [FrankenPHP with websocket, queue, and scheduler releases](https://github.com/y-l-g/websocket/releases).
+- **Docker:** Use the [docker image](https://github.com/y-l-g?tab=packages&repo_name=websocket).
 
-#### Option B: Compile from Source
+#### Compile from Source
 
 If you prefer to build it yourself, follow [the instructions to install a ZTS version of libphp and `xcaddy`](https://frankenphp.dev/docs/compile/#install-php). Then, use `xcaddy` to build FrankenPHP with the `pogo-queue` module:
 
@@ -42,13 +68,11 @@ xcaddy build \
     --with github.com/dunglas/caddy-cbrotli
 ```
 
-### 2. Install Laravel Dependencies
+---
 
-Ensure Laravel Octane is installed and configured for FrankenPHP:
+## Usage with Laravel
 
-```bash
-php artisan octane:install --server=frankenphp
-```
+### Install Dependencies
 
 Install the queue driver package:
 
@@ -56,7 +80,13 @@ Install the queue driver package:
 composer require pogo/queue
 ```
 
-### 3. Configure Environment
+Ensure Laravel Octane is installed and configured for FrankenPHP:
+
+```bash
+php artisan octane:install --server=frankenphp
+```
+
+### Configure Environment
 
 Add the following variables to your `.env` file:
 
@@ -64,9 +94,10 @@ Add the following variables to your `.env` file:
 QUEUE_CONNECTION=pogo
 POGO_QUEUE=default
 ```
+
 *(Note: `POGO_QUEUE` is optional and defaults to 'default')*
 
-### 4. Configure Laravel
+### Configure Laravel
 
 Add the `pogo` connection to the `connections` array in `config/queue.php`:
 
@@ -78,7 +109,7 @@ Add the `pogo` connection to the `connections` array in `config/queue.php`:
 ],
 ```
 
-### 5. Create Worker Script
+### Create Worker Script
 
 Create a new file at `public/queue-worker.php`.
 This script is a dedicated entry point for the queue worker process.
@@ -162,43 +193,35 @@ try {
 }
 ```
 
-### 6. Configure Caddyfile
+### Configure Caddyfile
 
 Update your `Caddyfile` (usually at the project root) to include the `pogo_queue` block.
 Below is a complete example based on the official Octane configuration.
 
 ```caddy
 {
-    {$CADDY_GLOBAL_OPTIONS}
-
-    admin {$CADDY_SERVER_ADMIN_HOST}:{$CADDY_SERVER_ADMIN_PORT}
-
     frankenphp {
         worker {
-            file "{$APP_PUBLIC_PATH}/frankenphp-worker.php"
-            {$CADDY_SERVER_WORKER_DIRECTIVE}
-            {$CADDY_SERVER_WATCH_DIRECTIVES}
+            file "public/frankenphp-worker.php"
         }
     }
     
     # Queue Configuration
     pogo_queue {
-        worker {$APP_PUBLIC_PATH}/queue-worker.php
+        worker public/queue-worker.php
         name myQueue
         size 10000       # Max jobs in memory. If full, dispatch throws QueueFullException.
         num_threads 32   # Number of concurrent workers (defaults to CPU count).
     }
 }
 
-{$CADDY_EXTRA_CONFIG}
-
-{$CADDY_SERVER_SERVER_NAME} {
+:8080 {
     log {
-        level {$CADDY_SERVER_LOG_LEVEL}
+        level INFO
 
         # Redact the authorization query parameter that can be set by Mercure...
         format filter {
-            wrap {$CADDY_SERVER_LOGGER}
+            wrap json
             fields {
                 uri query {
                     replace authorization REDACTED
@@ -208,37 +231,31 @@ Below is a complete example based on the official Octane configuration.
     }
     
     route {
-        root * "{$APP_PUBLIC_PATH}"
+        root * public
         encode zstd br gzip
-
-        # Mercure configuration is injected here...
-        {$CADDY_SERVER_EXTRA_DIRECTIVES}
 
         php_server {
             index frankenphp-worker.php
             try_files {path} frankenphp-worker.php
-            # Required for the public/storage/ directory...
             resolve_root_symlink
         }
     }
 }
 ```
 
-### 7. Run Octane
+### Run Octane
 
 Start the server using the configured Caddyfile:
 
 ```bash
-php artisan octane:frankenphp --caddyfile=Caddyfile
+php artisan octane:frankenphp --caddyfile=Caddyfile 
+#or
+./frankenphp run --config Caddyfile
 ```
 
----
+### Handling Backpressure (Laravel)
 
-## Handling Backpressure
-
-Since the queue has a fixed size (defined in `Caddyfile` via the `size` directive), it can fill up if workers are slower than producers.
-
-**Unlike Redis, this driver throws an exception immediately when the queue is full.**
+Since the queue has a fixed size (defined in `Caddyfile` via the `size` directive), it can fill up if workers are slower than producers. **Unlike Redis, this driver throws an exception immediately when the queue is full.**
 
 You should handle this exception in your code:
 
@@ -250,7 +267,6 @@ try {
     ProcessData::dispatch($data);
 } catch (QueueFullException $e) {
     // The buffer is full.
-    
     // Option 1: Return a 503 Service Unavailable to the client
     abort(503, 'Server is busy, please try again later.');
     
@@ -259,8 +275,137 @@ try {
 }
 ```
 
-## Limitations
+---
+
+## Usage with Symfony
+
+### Requirements
+
+- PHP 8.5+
+- Symfony 8.0+
+- FrankenPHP binary compiled with the `pogo_queue` module enabled.
+
+### Install Bundle
+
+```bash
+composer require pogo/symfony-queue
+```
+
+### Register the Transport Factory (Crucial)
+
+Open `config/services.yaml` and add the factory to the `services` section:
+
+```yaml
+services:
+    # ... other services ...
+
+    # Register the Pogo Transport Factory manually
+    Pogo\Queue\Symfony\Transport\PogoQueueTransportFactory:
+        tags: ['messenger.transport_factory']
+```
+
+### Configure Messenger
+
+Open `config/packages/messenger.yaml` and configure the transport.
+
+```yaml
+framework:
+    messenger:
+        transports:
+            # The DSN must start with pogo-queue://
+            pogo: 'pogo-queue://default'
+            
+        routing:
+            'App\Message\YourMessage': pogo
+```
+
+### Create Worker Script (Symfony)
+
+Create a file named `queue-worker.php` in your **`public/`** folder.
+
+```php
+<?php
+
+use App\Kernel;
+use Symfony\Bundle\FrameworkBundle\Console\Application;
+use Symfony\Component\Console\Input\ArrayInput;
+
+// Pointing to vendor one level up from public/
+if (!is_dir(__DIR__ . '/../vendor')) {
+    throw new LogicException('Dependencies are missing. Try running "composer install".');
+}
+
+if (!is_file(__DIR__ . '/../vendor/autoload_runtime.php')) {
+    throw new LogicException('Symfony Runtime is missing. Try running "composer require symfony/runtime".');
+}
+
+require_once __DIR__ . '/../vendor/autoload_runtime.php';
+
+return function (array $context) {
+    $kernel = new Kernel($context['APP_ENV'], (bool) $context['APP_DEBUG']);
+
+    $app = new Application($kernel);
+
+    // Set the default command to consume messages
+    $app->setDefaultCommand('messenger:consume', true);
+
+    $input = new ArrayInput([
+        'receivers' => ['pogo'],
+        '--limit' => 1000,
+        '--time-limit' => 3600
+    ]);
+
+    $app->run($input);
+
+    return $app;
+};
+```
+
+### Configure Caddyfile (Symfony)
+
+Create (or update) a `Caddyfile` at the root of your project. This configuration enables the `pogo_queue` worker and serves the Symfony application.
+
+```caddy
+{
+    frankenphp
+    # Configure the queue worker module
+    pogo_queue {
+        worker public/queue-worker.php
+    }
+}
+
+:8000 {
+    root public
+
+    @phpRoute {
+        not file {path}
+    }
+    rewrite @phpRoute index.php
+
+    @frontController path index.php
+    php @frontController
+
+    file_server {
+        hide *.php
+    }
+}
+```
+
+### Run FrankenPHP
+
+Start FrankenPHP using the configuration file:
+
+```bash
+frankenphp run --config Caddyfile
+```
+
+You should see logs indicating that the worker has started:
+`[OK] Consuming messages from transport "pogo".`
+
+---
+
+## General Limitations
 
 1. **No Persistence**: Data is stored in RAM. **Restart = Data Loss.**
 2. **No Delays**: `later()` and `delay()` are not supported and will throw a `BadMethodCallException`.
-3. **No Size Inspection**: `Queue::size()` currently returns `0` because the extension does not expose internal metrics yet.
+3. **No Size Inspection (Laravel)**: `Queue::size()` currently returns `0` because the extension does not expose internal metrics yet.

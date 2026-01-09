@@ -6,7 +6,6 @@ namespace Pogo\Queue\Symfony\Transport;
 
 use Pogo\Queue\Symfony\Contract\PogoAdapter;
 use Symfony\Component\Messenger\Envelope;
-use Symfony\Component\Messenger\Exception\LogicException;
 use Symfony\Component\Messenger\Transport\Serialization\PhpSerializer;
 use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
 use Symfony\Component\Messenger\Transport\TransportInterface;
@@ -37,12 +36,12 @@ class FrankenPHPQueueTransport implements TransportInterface
 
     public function ack(Envelope $envelope): void
     {
-        throw new LogicException('Not implemented');
+        // throw new LogicException('Not implemented');
     }
 
     public function reject(Envelope $envelope): void
     {
-        throw new LogicException('Not implemented');
+        // throw new LogicException('Not implemented');
     }
 
     public function send(Envelope $envelope): Envelope
