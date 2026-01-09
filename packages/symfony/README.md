@@ -31,7 +31,7 @@ return [
 framework:
     messenger:
         transports:
-            pogo: 'frankenphp-queue://default'
+            pogo: 'pogo-queue://default'
             
         routing:
             'App\Message\YourMessage': pogo

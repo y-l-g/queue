@@ -28,7 +28,7 @@ class Kernel extends BaseKernel
             'test' => true,
             'messenger' => [
                 'transports' => [
-                    'pogo' => 'frankenphp-queue://default',
+                    'pogo' => 'pogo-queue://default',
                 ],
             ],
         ]);

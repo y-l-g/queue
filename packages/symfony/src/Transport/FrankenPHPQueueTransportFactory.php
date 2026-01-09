@@ -18,6 +18,6 @@ final class FrankenPHPQueueTransportFactory implements TransportFactoryInterface
 
     public function supports(string $dsn, array $options): bool
     {
-        return str_starts_with($dsn, 'frankenphp-queue://');
+        return str_starts_with($dsn, 'pogo-queue://');
     }
 }

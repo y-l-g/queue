@@ -15,7 +15,7 @@ final class FrankenPHPQueueTransportFactoryTest extends TestCase
     {
         $factory = new FrankenPHPQueueTransportFactory();
 
-        $this->assertTrue($factory->supports('frankenphp-queue://default', []));
+        $this->assertTrue($factory->supports('pogo-queue://default', []));
         $this->assertFalse($factory->supports('redis://default', []));
     }
 
@@ -24,7 +24,7 @@ final class FrankenPHPQueueTransportFactoryTest extends TestCase
         $factory = new FrankenPHPQueueTransportFactory();
         $serializer = $this->createMock(SerializerInterface::class);
 
-        $transport = $factory->createTransport('frankenphp-queue://default', [], $serializer);
+        $transport = $factory->createTransport('pogo-queue://default', [], $serializer);
 
         $this->assertInstanceOf(FrankenPHPQueueTransport::class, $transport);
     }
