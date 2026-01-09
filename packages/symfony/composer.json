@@ -4,7 +4,7 @@
   "description": "FrankenPHP Queue Driver for Symfony Messenger",
   "license": "MIT",
   "require": {
-    "php": ">=8.2",
+    "php": ">=8.5",
     "symfony/config": "^6.4 || ^7.0 || ^8.0",
     "symfony/dependency-injection": "^6.4 || ^7.0 || ^8.0",
     "symfony/http-kernel": "^6.4 || ^7.0 || ^8.0",

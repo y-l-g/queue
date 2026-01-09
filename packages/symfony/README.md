@@ -4,8 +4,8 @@ A [FrankenPHP](https://frankenphp.dev) Messenger transport for Symfony.
 
 ## Requirements
 
-* PHP 8.2+
-* Symfony 6.4+ or 7.0+
+* PHP 8.4+
+* Symfony 8.0+
 * FrankenPHP with `pogo_queue` module enabled.
 
 ## Installation
