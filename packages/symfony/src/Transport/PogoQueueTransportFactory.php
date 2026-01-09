@@ -13,7 +13,7 @@ final class PogoQueueTransportFactory implements TransportFactoryInterface
 {
     public function createTransport(string $dsn, array $options, SerializerInterface $serializer): TransportInterface
     {
-        return new FrankenPHPQueueTransport(new FrankenPhpAdapter(), $serializer);
+        return new PogoQueueTransport(new FrankenPhpAdapter(), $serializer);
     }
 
     public function supports(string $dsn, array $options): bool

@@ -1,0 +1,3 @@
+services:
+  Pogo\Queue\Symfony\Transport\PogoQueueTransportFactory:
+    tags: [messenger.transport_factory]

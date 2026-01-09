@@ -6,7 +6,7 @@ namespace Pogo\Queue\Symfony\Tests\Functional;
 
 use PHPUnit\Framework\TestCase;
 use Pogo\Queue\Symfony\Tests\App\Kernel;
-use Pogo\Queue\Symfony\Transport\FrankenPHPQueueTransportFactory;
+use Pogo\Queue\Symfony\Transport\PogoQueueTransportFactory;
 use Symfony\Component\Messenger\Transport\TransportFactoryInterface;
 
 final class BundleInitializationTest extends TestCase
@@ -21,8 +21,8 @@ final class BundleInitializationTest extends TestCase
         $this->assertTrue($container->has('messenger.transport_factory'));
 
 
-        $transportFactory = $container->get(FrankenPHPQueueTransportFactory::class);
-        $this->assertInstanceOf(FrankenPHPQueueTransportFactory::class, $transportFactory);
+        $transportFactory = $container->get(PogoQueueTransportFactory::class);
+        $this->assertInstanceOf(PogoQueueTransportFactory::class, $transportFactory);
         $this->assertInstanceOf(TransportFactoryInterface::class, $transportFactory);
     }
 }

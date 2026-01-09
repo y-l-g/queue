@@ -10,12 +10,13 @@ use Symfony\Component\Messenger\Transport\Serialization\PhpSerializer;
 use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
 use Symfony\Component\Messenger\Transport\TransportInterface;
 
-class FrankenPHPQueueTransport implements TransportInterface
+class PogoQueueTransport implements TransportInterface
 {
     public function __construct(
         private readonly PogoAdapter $adapter,
         private readonly SerializerInterface $serializer = new PhpSerializer(),
-    ) {}
+    ) {
+    }
 
     public function get(): iterable
     {

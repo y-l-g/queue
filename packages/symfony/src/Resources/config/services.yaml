@@ -1,3 +1,0 @@
-services:
-  Pogo\Queue\Symfony\Transport\FrankenPHPQueueTransportFactory:
-    tags: [messenger.transport_factory]
