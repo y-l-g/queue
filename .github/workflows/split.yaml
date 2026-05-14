@@ -4,8 +4,9 @@ on:
   push:
     tags:
       - "*"
-env:
-  GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+
+permissions:
+  contents: read
 
 jobs:
   packages_split:
@@ -23,8 +24,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Verify split token
+        env:
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+        run: |
+          if [ -z "$ACCESS_TOKEN" ]; then
+            echo "::error::Missing ACCESS_TOKEN secret. It must be a token with write access to y-l-g/${{ matrix.package.split_repository }}."
+            exit 1
+          fi
+
       - if: "startsWith(github.ref, 'refs/tags/')"
         uses: danharrin/monorepo-split-github-action@v2.4.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
         with:
           tag: ${GITHUB_REF#refs/tags/}
           package_directory: "packages/${{ matrix.package.local_path }}"

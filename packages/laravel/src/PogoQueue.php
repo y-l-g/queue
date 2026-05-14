@@ -22,6 +22,26 @@ class PogoQueue extends Queue implements QueueContract
         return 0;
     }
 
+    public function pendingSize($queue = null)
+    {
+        return 0;
+    }
+
+    public function delayedSize($queue = null)
+    {
+        return 0;
+    }
+
+    public function reservedSize($queue = null)
+    {
+        return 0;
+    }
+
+    public function creationTimeOfOldestPendingJob($queue = null)
+    {
+        return null;
+    }
+
     public function push($job, $data = '', $queue = null)
     {
         return $this->pushRaw($this->createPayload($job, $queue ?? 'default', $data), $queue);

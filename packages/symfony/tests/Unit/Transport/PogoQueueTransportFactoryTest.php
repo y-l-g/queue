@@ -7,7 +7,21 @@ namespace Pogo\Queue\Symfony\Tests\Unit\Transport;
 use PHPUnit\Framework\TestCase;
 use Pogo\Queue\Symfony\Transport\PogoQueueTransport;
 use Pogo\Queue\Symfony\Transport\PogoQueueTransportFactory;
+use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
+
+final class FakeSerializer implements SerializerInterface
+{
+    public function decode(array $encodedEnvelope): Envelope
+    {
+        return new Envelope((object) $encodedEnvelope);
+    }
+
+    public function encode(Envelope $envelope): array
+    {
+        return ['body' => serialize($envelope->getMessage())];
+    }
+}
 
 final class PogoQueueTransportFactoryTest extends TestCase
 {
@@ -22,9 +36,8 @@ final class PogoQueueTransportFactoryTest extends TestCase
     public function testCreateTransport(): void
     {
         $factory = new PogoQueueTransportFactory();
-        $serializer = $this->createMock(SerializerInterface::class);
 
-        $transport = $factory->createTransport('pogo-queue://default', [], $serializer);
+        $transport = $factory->createTransport('pogo-queue://default', [], new FakeSerializer());
 
         $this->assertInstanceOf(PogoQueueTransport::class, $transport);
     }

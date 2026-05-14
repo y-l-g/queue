@@ -18,25 +18,33 @@ if (!function_exists('pogo_queue')) {
     }
 }
 
+class FakePogoAdapter implements PogoAdapter
+{
+    public ?string $payload = null;
+
+    public function __construct(private bool $result = true)
+    {
+    }
+
+    public function push(string $payload): bool
+    {
+        $this->payload = $payload;
+
+        return $this->result;
+    }
+}
+
 class PogoQueueTest extends TestCase
 {
     public function test_push_raw_dispatches_successfully()
     {
-        // Arrange: Create a mock adapter that returns true (success)
-        $adapter = $this->createMock(PogoAdapter::class);
-        $adapter->expects($this->once())
-            ->method('push')
-            ->with('{"job":"Foo"}')
-            ->willReturn(true);
-
+        $adapter = new FakePogoAdapter();
         $queue = new PogoQueue($adapter);
         $payload = json_encode(['job' => 'Foo']);
 
-        // Act
         $queue->pushRaw($payload);
 
-        // Assert: No exception thrown implies success, and mock verification passes
-        $this->assertTrue(true);
+        $this->assertSame('{"job":"Foo"}', $adapter->payload);
     }
 
     public function test_push_raw_throws_exception_when_queue_is_full()
@@ -44,22 +52,15 @@ class PogoQueueTest extends TestCase
         $this->expectException(QueueFullException::class);
         $this->expectExceptionMessage('FrankenPHP in-memory queue is full. Job rejected.');
 
-        // Arrange: Create a mock adapter that returns false (failure/full)
-        $adapter = $this->createMock(PogoAdapter::class);
-        $adapter->expects($this->once())
-            ->method('push')
-            ->willReturn(false);
-
+        $adapter = new FakePogoAdapter(false);
         $queue = new PogoQueue($adapter);
 
-        // Act
         $queue->pushRaw('{"job":"test"}');
     }
 
     public function test_later_throws_bad_method_call_exception()
     {
-        $adapter = $this->createMock(PogoAdapter::class);
-        $queue = new PogoQueue($adapter);
+        $queue = new PogoQueue(new FakePogoAdapter());
 
         $this->expectException(BadMethodCallException::class);
         $this->expectExceptionMessage('Pogo Queue does not support delayed jobs');
@@ -69,33 +70,31 @@ class PogoQueueTest extends TestCase
 
     public function test_size_returns_zero()
     {
-        $adapter = $this->createMock(PogoAdapter::class);
-        $queue = new PogoQueue($adapter);
+        $queue = new PogoQueue(new FakePogoAdapter());
 
         $this->assertEquals(0, $queue->size());
     }
 
+    public function test_queue_metrics_return_empty_values()
+    {
+        $queue = new PogoQueue(new FakePogoAdapter());
+
+        $this->assertEquals(0, $queue->pendingSize());
+        $this->assertEquals(0, $queue->delayedSize());
+        $this->assertEquals(0, $queue->reservedSize());
+        $this->assertNull($queue->creationTimeOfOldestPendingJob());
+    }
+
     public function test_push_uses_create_payload()
     {
-        // Arrange: We capture the payload passed to the adapter
-        $adapter = $this->createMock(PogoAdapter::class);
-        $capturedPayload = null;
-
-        $adapter->method('push')
-            ->willReturnCallback(function ($payload) use (&$capturedPayload) {
-                $capturedPayload = $payload;
-                return true;
-            });
-
+        $adapter = new FakePogoAdapter();
         $queue = new PogoQueue($adapter);
-        $queue->setContainer($this->createMock(Container::class));
+        $queue->setContainer(new Container());
 
-        // Act
         $queue->push('MyJob', ['data' => 123]);
 
-        // Assert
-        $this->assertNotNull($capturedPayload);
-        $decoded = json_decode($capturedPayload, true);
+        $this->assertNotNull($adapter->payload);
+        $decoded = json_decode($adapter->payload, true);
 
         $this->assertEquals('MyJob', $decoded['job']);
         $this->assertEquals(123, $decoded['data']['data']);
