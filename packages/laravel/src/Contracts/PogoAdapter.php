@@ -4,5 +4,5 @@ namespace Pogo\Queue\Laravel\Contracts;
 
 interface PogoAdapter
 {
-    public function push(string $payload): bool;
+    public function push(string $payload): int;
 }

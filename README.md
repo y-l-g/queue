@@ -216,6 +216,7 @@ Below is a complete example based on the official Octane configuration.
         worker public/queue-worker.php
         name myQueue
         size 10000       # Max jobs in memory. If full, dispatch throws QueueFullException.
+        max_message_bytes 1048576 # Optional: hard limit for message size, defaults to 1MB.
         num_threads 32   # Number of concurrent workers (defaults to CPU count).
     }
 }
@@ -413,4 +414,5 @@ You should see logs indicating that the worker has started:
 
 1. **No Persistence**: Data is stored in RAM. **Restart = Data Loss.**
 2. **No Delays**: `later()` and `delay()` are not supported and will throw a `BadMethodCallException`.
-3. **No Size Inspection (Laravel)**: `Queue::size()` currently returns `0` because the extension does not expose internal metrics yet.
+3. **No Backpressure Delay**: when full, dispatch fails fast with explicit rejection.
+4. **Size Visibility (Laravel)**: `Queue::size()` returns the active in-memory depth exposed by the extension (fallbacks to `0` if status metrics are unavailable).

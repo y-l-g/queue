@@ -19,3 +19,8 @@ func init() {
 func pogo_dispatch(msg *C.char, length C.size_t) C.int {
 	return dispatch(msg, length)
 }
+
+//export pogo_queue_status
+func pogo_queue_status() *C.char {
+	return queueStatsJSON()
+}

@@ -6,7 +6,7 @@ namespace Pogo\Queue\Symfony\Contract;
 
 interface PogoAdapter
 {
-    public function push(string $payload): bool;
+    public function push(string $payload): int;
 
     public function handle(callable $callback): bool;
 }

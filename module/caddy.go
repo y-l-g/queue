@@ -22,10 +22,11 @@ func init() {
 }
 
 type Queue struct {
-	Size       int    `json:"size,omitempty"`
-	NumThreads int    `json:"numthreads,omitempty"`
-	Name       string `json:"name,omitempty"`
-	Worker     string `json:"worker,omitempty"`
+	Size            int    `json:"size,omitempty"`
+	NumThreads      int    `json:"numthreads,omitempty"`
+	Name            string `json:"name,omitempty"`
+	Worker          string `json:"worker,omitempty"`
+	MaxMessageBytes int    `json:"max_message_bytes,omitempty"`
 
 	dispatcher *dispatcher
 }
@@ -51,7 +52,7 @@ func (g *Queue) Provision(ctx caddy.Context) error {
 	}
 
 	w := frankenphpCaddy.RegisterWorkers(g.Name, g.Worker, g.NumThreads)
-	g.dispatcher = newDispatcher(w, ctx.Slogger(), g.Size)
+	g.dispatcher = newDispatcher(w, ctx.Slogger(), g.Size, g.MaxMessageBytes)
 
 	globalDispatcherMu.Lock()
 	if globalDispatcher != nil {
@@ -109,6 +110,15 @@ func (g *Queue) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.Errf("failed to parse num_threads: %v", err)
 				}
 				g.NumThreads = t
+			case "max_message_bytes":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				maxMessageBytes, err := strconv.Atoi(d.Val())
+				if err != nil {
+					return d.Errf("failed to parse max_message_bytes: %v", err)
+				}
+				g.MaxMessageBytes = maxMessageBytes
 			default:
 				return d.Errf(`unrecognized subdirective "%s"`, d.Val())
 			}

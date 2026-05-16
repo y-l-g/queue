@@ -2,6 +2,10 @@
 
 /** @generate-class-entries */
 
-function pogo_queue(mixed $data): bool
+function pogo_queue(string $data): int
+{
+}
+
+function pogo_queue_status(): string
 {
 }

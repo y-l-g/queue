@@ -7,12 +7,12 @@ use RuntimeException;
 
 class FrankenPhpAdapter implements PogoAdapter
 {
-    public function push(string $payload): bool
+    public function push(string $payload): int
     {
         if (!function_exists('pogo_queue')) {
             throw new RuntimeException("FrankenPHP 'pogo_queue' extension is not enabled.");
         }
 
-        return \pogo_queue($payload);
+        return (int) \pogo_queue($payload);
     }
 }

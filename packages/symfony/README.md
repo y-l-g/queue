@@ -27,7 +27,7 @@ framework:
     messenger:
         transports:
             pogo: 'pogo-queue://default'
-            
+             
         routing:
             'App\Message\YourMessage': pogo
 ```
@@ -54,15 +54,15 @@ use App\Kernel;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Console\Input\ArrayInput;
 
-if (!is_dir(__DIR__ . '../vendor')) {
+if (!is_dir(__DIR__ . '/../vendor')) {
     throw new LogicException('Dependencies are missing. Try running "composer install".');
 }
 
-if (!is_file(__DIR__ . '../vendor/autoload_runtime.php')) {
+if (!is_file(__DIR__ . '/../vendor/autoload_runtime.php')) {
     throw new LogicException('Symfony Runtime is missing. Try running "composer require symfony/runtime".');
 }
 
-require_once __DIR__ . '../vendor/autoload_runtime.php';
+require_once __DIR__ . '/../vendor/autoload_runtime.php';
 
 return function (array $context) {
     $kernel = new Kernel($context['APP_ENV'], (bool) $context['APP_DEBUG']);
@@ -128,7 +128,7 @@ You should see logs indicating that the worker has started:
 ### Troubleshooting & Known Limitations
 
 1. **"No transport supports Messenger DSN..."**:
-    * Ensure you have registered the `FrankenPHPQueueTransportFactory` in your `config/services.yaml`.
+    * Ensure you have registered the `PogoQueueTransportFactory` in your `config/services.yaml`.
     * Ensure your DSN in `messenger.yaml` starts exactly with `pogo-queue://`.
 
 2. **Volatile Memory**:
