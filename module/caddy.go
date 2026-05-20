@@ -2,7 +2,7 @@ package queue
 
 import (
 	"strconv"
-	"sync"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -11,24 +11,24 @@ import (
 	frankenphpCaddy "github.com/dunglas/frankenphp/caddy"
 )
 
-var (
-	globalDispatcher   *dispatcher
-	globalDispatcherMu sync.RWMutex
-)
-
 func init() {
 	caddy.RegisterModule(Queue{})
 	httpcaddyfile.RegisterGlobalOption("pogo_queue", parseGlobalOption)
 }
 
 type Queue struct {
-	Size            int    `json:"size,omitempty"`
-	NumThreads      int    `json:"numthreads,omitempty"`
-	Name            string `json:"name,omitempty"`
-	Worker          string `json:"worker,omitempty"`
-	MaxMessageBytes int    `json:"max_message_bytes,omitempty"`
+	Backend           backendConfig  `json:"backend,omitempty"`
+	Queues            []string       `json:"queues,omitempty"`
+	Worker            string         `json:"worker,omitempty"`
+	Concurrency       int            `json:"concurrency,omitempty"`
+	WorkerThreads     int            `json:"worker_threads,omitempty"`
+	MaxPayloadBytes   int            `json:"max_payload_bytes,omitempty"`
+	VisibilityTimeout caddy.Duration `json:"visibility_timeout,omitempty"`
+	ReserveTimeout    caddy.Duration `json:"reserve_timeout,omitempty"`
+	ShutdownTimeout   caddy.Duration `json:"shutdown_timeout,omitempty"`
+	MaxAttempts       int            `json:"max_attempts,omitempty"`
 
-	dispatcher *dispatcher
+	manager *manager
 }
 
 func (Queue) CaddyModule() caddy.ModuleInfo {
@@ -39,41 +39,86 @@ func (Queue) CaddyModule() caddy.ModuleInfo {
 }
 
 func (g *Queue) Provision(ctx caddy.Context) error {
-	if g.Size <= 0 {
-		g.Size = 10_000
+	if len(g.Queues) == 0 {
+		g.Queues = []string{"default"}
 	}
-
-	if g.Name == "" {
-		g.Name = "m#Queue"
-	}
-
 	if g.Worker == "" {
 		g.Worker = "queue-worker.php"
 	}
-
-	w := frankenphpCaddy.RegisterWorkers(g.Name, g.Worker, g.NumThreads)
-	g.dispatcher = newDispatcher(w, ctx.Slogger(), g.Size, g.MaxMessageBytes)
-
-	globalDispatcherMu.Lock()
-	if globalDispatcher != nil {
-		go globalDispatcher.shutdown()
+	if g.Concurrency <= 0 {
+		g.Concurrency = 1
 	}
-	globalDispatcher = g.dispatcher
-	globalDispatcherMu.Unlock()
+	if g.MaxPayloadBytes <= 0 {
+		g.MaxPayloadBytes = defaultMaxMessageBytes
+	}
+	if g.VisibilityTimeout <= 0 {
+		g.VisibilityTimeout = caddy.Duration(90 * time.Second)
+	}
+	if g.ReserveTimeout <= 0 {
+		g.ReserveTimeout = caddy.Duration(time.Second)
+	}
+	if g.ShutdownTimeout <= 0 {
+		g.ShutdownTimeout = caddy.Duration(30 * time.Second)
+	}
+	if g.MaxAttempts <= 0 {
+		g.MaxAttempts = defaultMaxAttempts
+	}
+
+	b, err := newBackend(
+		g.Backend,
+		g.Queues,
+		g.MaxPayloadBytes,
+		time.Duration(g.VisibilityTimeout),
+		g.MaxAttempts,
+		ctx.Slogger(),
+	)
+	if err != nil {
+		return err
+	}
+	if err := b.Start(ctx); err != nil {
+		return err
+	}
+
+	workerThreads := g.WorkerThreads
+	if workerThreads <= 0 {
+		workerThreads = g.Concurrency
+	}
+	workers := frankenphpCaddy.RegisterWorkers("pogo_queue", g.Worker, workerThreads)
+
+	g.manager = newManager(
+		b,
+		workers,
+		ctx.Slogger(),
+		g.Queues,
+		g.Backend.Consumer,
+		g.Concurrency,
+		time.Duration(g.ReserveTimeout),
+		time.Duration(g.VisibilityTimeout),
+		time.Duration(g.ShutdownTimeout),
+		g.MaxAttempts,
+		g.MaxPayloadBytes,
+	)
+
+	globalManagerMu.Lock()
+	if globalManager != nil {
+		go globalManager.shutdown()
+	}
+	globalManager = g.manager
+	globalManagerMu.Unlock()
 
 	return nil
 }
 
 func (g *Queue) Cleanup() error {
-	if g.dispatcher != nil {
-		g.dispatcher.shutdown()
+	if g.manager != nil {
+		g.manager.shutdown()
 	}
 
-	globalDispatcherMu.Lock()
-	if globalDispatcher == g.dispatcher {
-		globalDispatcher = nil
+	globalManagerMu.Lock()
+	if globalManager == g.manager {
+		globalManager = nil
 	}
-	globalDispatcherMu.Unlock()
+	globalManagerMu.Unlock()
 
 	return nil
 }
@@ -82,43 +127,75 @@ func (g *Queue) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	for d.Next() {
 		for d.NextBlock(0) {
 			switch d.Val() {
+			case "backend":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				g.Backend.Type = d.Val()
+				nesting := d.Nesting()
+				for d.NextBlock(nesting) {
+					if err := g.parseBackendDirective(d); err != nil {
+						return err
+					}
+				}
 			case "worker":
 				if !d.NextArg() {
 					return d.ArgErr()
 				}
 				g.Worker = d.Val()
-			case "name":
+			case "queues":
 				if !d.NextArg() {
 					return d.ArgErr()
 				}
-				g.Name = d.Val()
+				g.Queues = splitQueueNames(d.Val())
+			case "concurrency":
+				value, err := parsePositiveIntDirective(d, "concurrency")
+				if err != nil {
+					return err
+				}
+				g.Concurrency = value
+			case "worker_threads", "num_threads", "min_threads":
+				value, err := parsePositiveIntDirective(d, d.Val())
+				if err != nil {
+					return err
+				}
+				g.WorkerThreads = value
+			case "max_payload_bytes", "max_message_bytes":
+				value, err := parsePositiveIntDirective(d, d.Val())
+				if err != nil {
+					return err
+				}
+				g.MaxPayloadBytes = value
+			case "visibility_timeout":
+				value, err := parseDurationDirective(d, "visibility_timeout")
+				if err != nil {
+					return err
+				}
+				g.VisibilityTimeout = caddy.Duration(value)
+			case "reserve_timeout":
+				value, err := parseDurationDirective(d, "reserve_timeout")
+				if err != nil {
+					return err
+				}
+				g.ReserveTimeout = caddy.Duration(value)
+			case "shutdown_timeout":
+				value, err := parseDurationDirective(d, "shutdown_timeout")
+				if err != nil {
+					return err
+				}
+				g.ShutdownTimeout = caddy.Duration(value)
+			case "max_attempts":
+				value, err := parsePositiveIntDirective(d, "max_attempts")
+				if err != nil {
+					return err
+				}
+				g.MaxAttempts = value
 			case "size":
-				if !d.NextArg() {
-					return d.ArgErr()
-				}
-				s, err := strconv.Atoi(d.Val())
+				value, err := parsePositiveIntDirective(d, "size")
 				if err != nil {
-					return d.Errf("failed to parse size: %v", err)
+					return err
 				}
-				g.Size = s
-			case "num_threads", "min_threads":
-				if !d.NextArg() {
-					return d.ArgErr()
-				}
-				t, err := strconv.Atoi(d.Val())
-				if err != nil {
-					return d.Errf("failed to parse num_threads: %v", err)
-				}
-				g.NumThreads = t
-			case "max_message_bytes":
-				if !d.NextArg() {
-					return d.ArgErr()
-				}
-				maxMessageBytes, err := strconv.Atoi(d.Val())
-				if err != nil {
-					return d.Errf("failed to parse max_message_bytes: %v", err)
-				}
-				g.MaxMessageBytes = maxMessageBytes
+				g.Backend.MaxMessages = value
 			default:
 				return d.Errf(`unrecognized subdirective "%s"`, d.Val())
 			}
@@ -126,6 +203,77 @@ func (g *Queue) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	}
 
 	return nil
+}
+
+func (g *Queue) parseBackendDirective(d *caddyfile.Dispenser) error {
+	switch d.Val() {
+	case "url":
+		if !d.NextArg() {
+			return d.ArgErr()
+		}
+		g.Backend.RedisURL = d.Val()
+	case "key_prefix":
+		if !d.NextArg() {
+			return d.ArgErr()
+		}
+		g.Backend.KeyPrefix = d.Val()
+	case "group":
+		if !d.NextArg() {
+			return d.ArgErr()
+		}
+		g.Backend.Group = d.Val()
+	case "consumer":
+		if !d.NextArg() {
+			return d.ArgErr()
+		}
+		g.Backend.Consumer = d.Val()
+	case "tls":
+		if !d.NextArg() {
+			return d.ArgErr()
+		}
+		value, err := strconv.ParseBool(d.Val())
+		if err != nil {
+			return d.Errf("failed to parse tls: %v", err)
+		}
+		g.Backend.TLS = value
+	case "max_messages":
+		value, err := parsePositiveIntDirective(d, "max_messages")
+		if err != nil {
+			return err
+		}
+		g.Backend.MaxMessages = value
+	case "max_total_bytes":
+		value, err := parsePositiveIntDirective(d, "max_total_bytes")
+		if err != nil {
+			return err
+		}
+		g.Backend.MaxTotalBytes = value
+	default:
+		return d.Errf(`unrecognized backend subdirective "%s"`, d.Val())
+	}
+	return nil
+}
+
+func parsePositiveIntDirective(d *caddyfile.Dispenser, name string) (int, error) {
+	if !d.NextArg() {
+		return 0, d.ArgErr()
+	}
+	value, err := strconv.Atoi(d.Val())
+	if err != nil || value <= 0 {
+		return 0, d.Errf("failed to parse %s as a positive integer", name)
+	}
+	return value, nil
+}
+
+func parseDurationDirective(d *caddyfile.Dispenser, name string) (time.Duration, error) {
+	if !d.NextArg() {
+		return 0, d.ArgErr()
+	}
+	value, err := time.ParseDuration(d.Val())
+	if err != nil || value <= 0 {
+		return 0, d.Errf("failed to parse %s as a positive duration", name)
+	}
+	return value, nil
 }
 
 func parseGlobalOption(d *caddyfile.Dispenser, _ any) (any, error) {

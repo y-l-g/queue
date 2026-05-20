@@ -9,6 +9,6 @@ class PogoConnector implements ConnectorInterface
 {
     public function connect(array $config)
     {
-        return new PogoQueue(new FrankenPhpAdapter());
+        return new PogoQueue(new FrankenPhpAdapter(), (string) ($config['queue'] ?? 'default'));
     }
 }

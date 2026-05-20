@@ -11,8 +11,7 @@
     "symfony/config": "^8.0",
     "symfony/dependency-injection": "^8.0",
     "symfony/http-kernel": "^8.0",
-    "symfony/messenger": "^8.0",
-    "pogo/symfony-queue": "*"
+    "symfony/messenger": "^8.0"
   },
   "require-dev": {
     "orchestra/testbench": "^11.0",

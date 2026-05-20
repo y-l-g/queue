@@ -60,9 +60,14 @@ func TestQueueEndToEnd(t *testing.T) {
 		frankenphp
 		order php_server before file_server
 		pogo_queue {
+			backend memory {
+				max_messages 10
+				max_total_bytes 1048576
+			}
 			worker "%s"
-			size 10
-			num_threads 1
+			queues default
+			concurrency 1
+			worker_threads 1
 		}
 	}
 

@@ -8,7 +8,6 @@ use PHPUnit\Framework\TestCase;
 use Pogo\Queue\Symfony\Contract\PogoAdapter;
 use Pogo\Queue\Symfony\Transport\PogoQueueTransport;
 use Pogo\Queue\Symfony\Transport\PogoQueueTransportFactory;
-use Pogo\Queue\Symfony\Transport\QueueDispatchException;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
 
@@ -42,17 +41,30 @@ final class FakeAdapter implements PogoAdapter
 {
     /** @var list<string> */
     public array $pushedMessages = [];
+    public array $acked = [];
+    public array $failed = [];
 
     public function __construct(
-        private int $nextDispatchResult = 1,
         public ?string $nextReceivedMessage = null,
     ) {}
 
-    public function push(string $payload): int
+    public function push(string $queue, string $payload, int $delaySeconds = 0): string
     {
         $this->pushedMessages[] = $payload;
 
-        return $this->nextDispatchResult;
+        return 'job-1';
+    }
+
+    public function ack(string $queue, string $deliveryId): void
+    {
+        $this->acked[] = [$queue, $deliveryId];
+    }
+
+    public function release(string $queue, string $deliveryId, int $delaySeconds = 0): void {}
+
+    public function fail(string $queue, string $deliveryId, string $reason = ''): void
+    {
+        $this->failed[] = [$queue, $deliveryId, $reason];
     }
 
     public function handle(callable $callback): bool
@@ -91,7 +103,7 @@ final class PogoQueueTransportFactoryTest extends TestCase
     {
         $adapter = new FakeAdapter();
         $serializer = new FakeSerializer();
-        $transport = new PogoQueueTransport($adapter, $serializer);
+        $transport = new PogoQueueTransport($adapter, 'default', $serializer);
 
         $transport->send(new Envelope(new \stdClass()));
 
@@ -103,9 +115,14 @@ final class PogoQueueTransportFactoryTest extends TestCase
     {
         $adapter = new FakeAdapter();
         $serializer = new FakeSerializer();
-        $transport = new PogoQueueTransport($adapter, $serializer);
+        $transport = new PogoQueueTransport($adapter, 'default', $serializer);
 
-        $adapter->nextReceivedMessage = serialize(new \stdClass());
+        $adapter->nextReceivedMessage = json_encode([
+            'id' => '1-0',
+            'queue' => 'default',
+            'payload' => serialize(new \stdClass()),
+            'attempts' => 2,
+        ], JSON_THROW_ON_ERROR);
 
         $items = iterator_to_array($transport->get());
         $this->assertCount(1, $items);
@@ -116,11 +133,17 @@ final class PogoQueueTransportFactoryTest extends TestCase
     public function testGetSkipsMalformedPayloadsWithoutThrowing(): void
     {
         $adapter = new FakeAdapter();
-        $adapter->nextReceivedMessage = 'not-json';
-        $transport = new PogoQueueTransport($adapter, new ThrowingSerializer());
+        $adapter->nextReceivedMessage = json_encode([
+            'id' => '1-0',
+            'queue' => 'default',
+            'payload' => 'not-json',
+            'attempts' => 1,
+        ], JSON_THROW_ON_ERROR);
+        $transport = new PogoQueueTransport($adapter, 'default', new ThrowingSerializer());
 
         $items = iterator_to_array($transport->get());
         $this->assertSame([], $items);
+        $this->assertSame([['default', '1-0', 'Message could not be decoded.']], $adapter->failed);
     }
 
     public function testGetSkipsMalformedEnvelopePayloadWithoutThrowing(): void
@@ -128,19 +151,28 @@ final class PogoQueueTransportFactoryTest extends TestCase
         $adapter = new FakeAdapter();
         $adapter->nextReceivedMessage = 'x';
 
-        $transport = new PogoQueueTransport($adapter, new ThrowingSerializer());
+        $transport = new PogoQueueTransport($adapter, 'default', new ThrowingSerializer());
 
         $items = iterator_to_array($transport->get());
         $this->assertSame([], $items);
     }
 
-    public function testSendRejectsUnknownStatusFromAdapter(): void
+    public function testAckCallsBackend(): void
     {
-        $adapter = new FakeAdapter(nextDispatchResult: 99);
+        $adapter = new FakeAdapter();
         $serializer = new FakeSerializer();
-        $transport = new PogoQueueTransport($adapter, $serializer);
+        $transport = new PogoQueueTransport($adapter, 'default', $serializer);
 
-        $this->expectException(QueueDispatchException::class);
-        $transport->send(new Envelope(new \stdClass()));
+        $adapter->nextReceivedMessage = json_encode([
+            'id' => '1-0',
+            'queue' => 'default',
+            'payload' => serialize(new \stdClass()),
+            'attempts' => 1,
+        ], JSON_THROW_ON_ERROR);
+
+        $items = iterator_to_array($transport->get());
+        $transport->ack($items[0]);
+
+        $this->assertSame([['default', '1-0']], $adapter->acked);
     }
 }

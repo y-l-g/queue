@@ -17,36 +17,123 @@ zend_module_entry queue_module_entry = {
     NULL,
     NULL,
     NULL,
-    "1.0.0",
+    "2.0.0",
     STANDARD_MODULE_PROPERTIES
 };
 
+static void return_owned_string(zval *return_value, char *value)
+{
+    if (value == NULL) {
+        RETVAL_EMPTY_STRING();
+        return;
+    }
+
+    size_t value_len = strlen(value);
+    zend_string *result = zend_string_init(value, value_len, 0);
+    free(value);
+    RETVAL_STR(result);
+}
+
 PHP_FUNCTION(pogo_queue) {
-    zval *data;
-    zend_string *str;
+    char *data;
+    size_t data_len;
 
     ZEND_PARSE_PARAMETERS_START(1, 1)
-        Z_PARAM_ZVAL(data)
+        Z_PARAM_STRING(data, data_len)
     ZEND_PARSE_PARAMETERS_END();
 
-    str = zval_get_string(data);
-
-    zend_long ret = pogo_dispatch(ZSTR_VAL(str), ZSTR_LEN(str));
-
-    zend_string_release(str);
+    zend_long ret = pogo_dispatch(data, data_len);
 
     RETURN_LONG(ret);
 }
 
-PHP_FUNCTION(pogo_queue_status)
-{
-    char *stats = pogo_queue_status();
-    if (stats == NULL) {
-        RETURN_EMPTY_STRING();
+PHP_FUNCTION(pogo_queue_push) {
+    char *queue;
+    size_t queue_len;
+    char *payload;
+    size_t payload_len;
+    zend_long delay = 0;
+
+    ZEND_PARSE_PARAMETERS_START(2, 3)
+        Z_PARAM_STRING(queue, queue_len)
+        Z_PARAM_STRING(payload, payload_len)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_LONG(delay)
+    ZEND_PARSE_PARAMETERS_END();
+
+    if (delay < 0) {
+        zend_throw_exception(zend_ce_value_error, "Delay must be greater than or equal to zero.", 0);
+        RETURN_THROWS();
     }
 
-    size_t stats_len = strlen(stats);
-    zend_string *statsString = zend_string_init(stats, stats_len, 0);
-    free(stats);
-    RETURN_STR(statsString);
+    char *result = pogo_queue_push(queue, queue_len, payload, payload_len, delay);
+    return_owned_string(return_value, result);
+}
+
+PHP_FUNCTION(pogo_queue_ack) {
+    char *queue;
+    size_t queue_len;
+    char *delivery;
+    size_t delivery_len;
+
+    ZEND_PARSE_PARAMETERS_START(2, 2)
+        Z_PARAM_STRING(queue, queue_len)
+        Z_PARAM_STRING(delivery, delivery_len)
+    ZEND_PARSE_PARAMETERS_END();
+
+    RETURN_LONG(pogo_queue_ack(queue, queue_len, delivery, delivery_len));
+}
+
+PHP_FUNCTION(pogo_queue_release) {
+    char *queue;
+    size_t queue_len;
+    char *delivery;
+    size_t delivery_len;
+    zend_long delay = 0;
+
+    ZEND_PARSE_PARAMETERS_START(2, 3)
+        Z_PARAM_STRING(queue, queue_len)
+        Z_PARAM_STRING(delivery, delivery_len)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_LONG(delay)
+    ZEND_PARSE_PARAMETERS_END();
+
+    if (delay < 0) {
+        zend_throw_exception(zend_ce_value_error, "Delay must be greater than or equal to zero.", 0);
+        RETURN_THROWS();
+    }
+
+    RETURN_LONG(pogo_queue_release(queue, queue_len, delivery, delivery_len, delay));
+}
+
+PHP_FUNCTION(pogo_queue_fail) {
+    char *queue;
+    size_t queue_len;
+    char *delivery;
+    size_t delivery_len;
+    char *reason = "";
+    size_t reason_len = 0;
+
+    ZEND_PARSE_PARAMETERS_START(2, 3)
+        Z_PARAM_STRING(queue, queue_len)
+        Z_PARAM_STRING(delivery, delivery_len)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_STRING(reason, reason_len)
+    ZEND_PARSE_PARAMETERS_END();
+
+    RETURN_LONG(pogo_queue_fail(queue, queue_len, delivery, delivery_len, reason, reason_len));
+}
+
+PHP_FUNCTION(pogo_queue_status)
+{
+    char *queue = "";
+    size_t queue_len = 0;
+
+    ZEND_PARSE_PARAMETERS_START(0, 1)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_STRING(queue, queue_len)
+    ZEND_PARSE_PARAMETERS_END();
+
+    char *stats = pogo_queue_status(queue, queue_len);
+    return_owned_string(return_value, stats);
 }

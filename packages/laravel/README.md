@@ -1,12 +1,10 @@
 # Pogo Queue Driver for Laravel
 
-A [FrankenPHP](https://frankenphp.dev) queue driver for Laravel. It utilizes the `pogo_queue` C-extension to handle jobs in-memory with high performance.
+Laravel queue driver for the FrankenPHP Queue v2 module.
 
-## Requirements
-
-* PHP 8.4+
-* Laravel 12+
-* FrankenPHP with `pogo_queue` module enabled.
+The driver expects a FrankenPHP binary compiled with the `pogo_queue` module and
+a production `backend redis` Caddy configuration. Jobs are delivered at least
+once, so handlers must be idempotent.
 
 ## Installation
 
@@ -16,28 +14,33 @@ composer require pogo/laravel-queue
 
 ## Configuration
 
-1. Add the connection to `config/queue.php`:
-
 ```php
 'pogo' => [
     'driver' => 'pogo',
     'queue' => env('POGO_QUEUE', 'default'),
+    'retry_after' => 90,
 ],
 ```
 
-2. Update your `.env` file:
-
 ```dotenv
 QUEUE_CONNECTION=pogo
+POGO_QUEUE=default
+POGO_REDIS_URL=redis://redis:6379/0
 ```
 
-## Usage
+Delayed dispatch is supported through Laravel's normal `later()` /
+`dispatch()->delay()` APIs.
 
-Run your application using FrankenPHP. The queue works in-memory.
+## Worker
 
-```bash
-php artisan octane:start --server=frankenphp
+Run jobs through a FrankenPHP worker entrypoint and construct `PogoJob` from the
+delivery envelope sent by the module:
+
+```php
+$delivery = json_decode($message, true, flags: JSON_THROW_ON_ERROR);
+$job = PogoJob::fromDelivery($app, $app['queue']->connection('pogo'), $delivery);
+$app['queue.worker']->process('pogo', $job, new WorkerOptions());
 ```
 
-> **Warning**
-> This is an in-memory queue. If the server restarts, all pending jobs are lost. Do not use for critical persistent data.
+`PogoJob::delete()`, `release()`, and `fail()` acknowledge, retry, or dead-letter
+the Redis Streams delivery.

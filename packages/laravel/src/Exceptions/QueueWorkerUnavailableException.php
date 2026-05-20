@@ -2,6 +2,4 @@
 
 namespace Pogo\Queue\Laravel\Exceptions;
 
-final class QueueWorkerUnavailableException extends QueueDispatchException
-{
-}
+final class QueueWorkerUnavailableException extends QueueDispatchException {}

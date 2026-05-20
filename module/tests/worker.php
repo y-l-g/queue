@@ -1,8 +1,10 @@
 <?php
 
-$handler = static function ($payload = null) {
-    if (is_string($payload) && !empty($payload)) {
-        file_put_contents($payload, 'PROCESSED');
+$handler = static function ($message = null) {
+    $delivery = is_string($message) ? json_decode($message, true) : null;
+    if (is_array($delivery) && is_string($delivery['payload'] ?? null)) {
+        file_put_contents($delivery['payload'], 'PROCESSED');
+        pogo_queue_ack($delivery['queue'], $delivery['id']);
     }
 };
 

@@ -2,34 +2,30 @@
 
 namespace Pogo\Queue\Laravel;
 
-use BadMethodCallException;
 use Illuminate\Contracts\Queue\Queue as QueueContract;
 use Illuminate\Queue\Queue;
 use Pogo\Queue\Laravel\Contracts\PogoAdapter;
-use Pogo\Queue\Laravel\Exceptions\QueueFullException;
-use Pogo\Queue\Laravel\Exceptions\QueuePayloadTooLargeException;
-use Pogo\Queue\Laravel\Exceptions\QueueSendException;
-use Pogo\Queue\Laravel\Exceptions\QueueShuttingDownException;
-use Pogo\Queue\Laravel\Exceptions\QueueWorkerUnavailableException;
 
 class PogoQueue extends Queue implements QueueContract
 {
-    private const DISPATCH_RESULT_ACCEPTED = 1;
-    private const DISPATCH_RESULT_FULL = 0;
-    private const DISPATCH_RESULT_WORKER_UNAVAILABLE = 2;
-    private const DISPATCH_RESULT_PAYLOAD_TOO_LARGE = 3;
-    private const DISPATCH_RESULT_SHUTTING_DOWN = 4;
-
     protected PogoAdapter $adapter;
+    protected string $defaultQueue;
 
-    public function __construct(PogoAdapter $adapter)
+    public function __construct(PogoAdapter $adapter, string $defaultQueue = 'default')
     {
         $this->adapter = $adapter;
+        $this->defaultQueue = $defaultQueue;
     }
 
     public function size($queue = null)
     {
-        return (int) ($this->queueStats()['current_depth'] ?? 0);
+        $stats = $this->queueStats($this->getQueue($queue));
+        $queueStats = $stats['queues'][0] ?? null;
+        if (!is_array($queueStats)) {
+            return 0;
+        }
+
+        return (int) (($queueStats['pending'] ?? 0) + ($queueStats['delayed'] ?? 0));
     }
 
     public function pendingSize($queue = null)
@@ -54,20 +50,21 @@ class PogoQueue extends Queue implements QueueContract
 
     public function push($job, $data = '', $queue = null)
     {
-        return $this->pushRaw($this->createPayload($job, $queue ?? 'default', $data), $queue);
+        $queue = $this->getQueue($queue);
+
+        return $this->pushRaw($this->createPayload($job, $queue, $data), $queue);
     }
 
     public function pushRaw($payload, $queue = null, array $options = [])
     {
-        $result = $this->adapter->push($payload);
-        if ($result !== self::DISPATCH_RESULT_ACCEPTED) {
-            $this->throwOnDispatchFailure($result);
-        }
+        return $this->adapter->push($this->getQueue($queue), $payload);
     }
 
     public function later($delay, $job, $data = '', $queue = null)
     {
-        throw new BadMethodCallException("Pogo Queue does not support delayed jobs. Use a persistent driver for scheduled tasks.");
+        $queue = $this->getQueue($queue);
+
+        return $this->adapter->push($queue, $this->createPayload($job, $queue, $data, $delay), $this->secondsUntil($delay));
     }
 
     public function pop($queue = null)
@@ -75,34 +72,18 @@ class PogoQueue extends Queue implements QueueContract
         return null;
     }
 
-    private function throwOnDispatchFailure(int $status): void
+    public function getAdapter(): PogoAdapter
     {
-        switch ($status) {
-            case self::DISPATCH_RESULT_FULL:
-                throw new QueueFullException("FrankenPHP in-memory queue is full. Job rejected.");
-            case self::DISPATCH_RESULT_WORKER_UNAVAILABLE:
-                throw new QueueWorkerUnavailableException("FrankenPHP worker is unavailable.");
-            case self::DISPATCH_RESULT_PAYLOAD_TOO_LARGE:
-                throw new QueuePayloadTooLargeException("FrankenPHP rejected the payload because it is larger than the queue limits.");
-            case self::DISPATCH_RESULT_SHUTTING_DOWN:
-                throw new QueueShuttingDownException("FrankenPHP queue is shutting down.");
-            default:
-                throw new QueueSendException(sprintf("FrankenPHP queue dispatch failed with status code %d.", $status));
-        }
+        return $this->adapter;
     }
 
-    private function queueStats(): array
+    private function getQueue(?string $queue): string
     {
-        if (!function_exists('pogo_queue_status')) {
-            return [];
-        }
+        return $queue ?: $this->defaultQueue;
+    }
 
-        $payload = \pogo_queue_status();
-        $decoded = json_decode($payload, true);
-        if (!is_array($decoded)) {
-            return [];
-        }
-
-        return $decoded;
+    private function queueStats(?string $queue = null): array
+    {
+        return $this->adapter->status($queue);
     }
 }

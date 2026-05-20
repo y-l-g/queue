@@ -6,6 +6,7 @@ require (
 	github.com/caddyserver/caddy/v2 v2.11.3
 	github.com/dunglas/frankenphp v1.12.3
 	github.com/dunglas/frankenphp/caddy v1.12.3
+	github.com/redis/go-redis/v9 v9.7.0
 )
 
 require (
@@ -46,6 +47,7 @@ require (
 	github.com/dgraph-io/badger/v2 v2.2007.4 // indirect
 	github.com/dgraph-io/ristretto v0.2.0 // indirect
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/dunglas/mercure v0.24.0 // indirect
 	github.com/dunglas/mercure/caddy v0.24.0 // indirect

@@ -6,20 +6,17 @@ namespace Pogo\Queue\Symfony\Transport;
 
 use Pogo\Queue\Symfony\Contract\PogoAdapter;
 use Symfony\Component\Messenger\Envelope;
+use Symfony\Component\Messenger\Stamp\DelayStamp;
+use Symfony\Component\Messenger\Stamp\TransportMessageIdStamp;
 use Symfony\Component\Messenger\Transport\Serialization\PhpSerializer;
 use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
 use Symfony\Component\Messenger\Transport\TransportInterface;
 
 final class PogoQueueTransport implements TransportInterface
 {
-    private const DISPATCH_RESULT_ACCEPTED = 1;
-    private const DISPATCH_RESULT_FULL = 0;
-    private const DISPATCH_RESULT_WORKER_UNAVAILABLE = 2;
-    private const DISPATCH_RESULT_PAYLOAD_TOO_LARGE = 3;
-    private const DISPATCH_RESULT_SHUTTING_DOWN = 4;
-
     public function __construct(
         private readonly PogoAdapter $adapter,
+        private readonly string $queue = 'default',
         private readonly SerializerInterface $serializer = new PhpSerializer(),
     ) {}
 
@@ -28,19 +25,30 @@ final class PogoQueueTransport implements TransportInterface
         $envelope = null;
 
         $this->adapter->handle(function (string $message) use (&$envelope) {
+            $delivery = json_decode($message, true);
+            if (!is_array($delivery) || !is_string($delivery['payload'] ?? null)) {
+                return;
+            }
+
+            $queue = (string) ($delivery['queue'] ?? $this->queue);
+            $deliveryId = (string) ($delivery['id'] ?? '');
+            $attempts = (int) ($delivery['attempts'] ?? 1);
+
             try {
                 $decodedEnvelope = $this->serializer->decode([
-                    'body' => $message,
+                    'body' => $delivery['payload'],
                 ]);
             } catch (\Throwable) {
+                if ($deliveryId !== '') {
+                    $this->adapter->fail($queue, $deliveryId, 'Message could not be decoded.');
+                }
                 return;
             }
 
-            if (!$decodedEnvelope instanceof Envelope) {
-                return;
-            }
-
-            $envelope = $decodedEnvelope;
+            $envelope = $decodedEnvelope->with(
+                new PogoReceivedStamp($queue, $deliveryId, $attempts),
+                new TransportMessageIdStamp($deliveryId),
+            );
         });
 
         if ($envelope !== null) {
@@ -52,40 +60,32 @@ final class PogoQueueTransport implements TransportInterface
 
     public function ack(Envelope $envelope): void
     {
-        // The in-memory worker has already removed the message from the queue.
+        $stamp = $envelope->last(PogoReceivedStamp::class);
+        if (!$stamp instanceof PogoReceivedStamp) {
+            return;
+        }
+
+        $this->adapter->ack($stamp->queue, $stamp->deliveryId);
     }
 
     public function reject(Envelope $envelope): void
     {
-        // Symfony Messenger owns retry and failure transport behavior.
+        $stamp = $envelope->last(PogoReceivedStamp::class);
+        if (!$stamp instanceof PogoReceivedStamp) {
+            return;
+        }
+
+        $this->adapter->fail($stamp->queue, $stamp->deliveryId, 'Message rejected by Symfony Messenger.');
     }
 
     public function send(Envelope $envelope): Envelope
     {
         $encoded = $this->serializer->encode($envelope);
-        $payload = (string) ($encoded['body'] ?? '');
-        $status = $this->adapter->push($payload);
+        $payload = $encoded['body'];
+        $delay = $envelope->last(DelayStamp::class);
+        $delaySeconds = $delay instanceof DelayStamp ? (int) ceil($delay->getDelay() / 1000) : 0;
+        $id = $this->adapter->push($this->queue, $payload, $delaySeconds);
 
-        $this->assertDispatchSucceeded($status);
-
-        return $envelope;
-    }
-
-    private function assertDispatchSucceeded(int $status): void
-    {
-        switch ($status) {
-            case self::DISPATCH_RESULT_ACCEPTED:
-                return;
-            case self::DISPATCH_RESULT_FULL:
-                throw new QueueFullException("FrankenPHP in-memory queue is full.");
-            case self::DISPATCH_RESULT_WORKER_UNAVAILABLE:
-                throw new QueueWorkerUnavailableException("FrankenPHP worker is unavailable.");
-            case self::DISPATCH_RESULT_PAYLOAD_TOO_LARGE:
-                throw new QueuePayloadTooLargeException("Payload exceeds FrankenPHP queue limits.");
-            case self::DISPATCH_RESULT_SHUTTING_DOWN:
-                throw new QueueShuttingDownException("FrankenPHP queue is shutting down.");
-            default:
-                throw new QueueDispatchException(sprintf("FrankenPHP queue dispatch failed with status code %d.", $status));
-        }
+        return $envelope->with(new TransportMessageIdStamp($id));
     }
 }

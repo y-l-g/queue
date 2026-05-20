@@ -6,6 +6,4 @@ namespace Pogo\Queue\Symfony\Transport;
 
 use Symfony\Component\Messenger\Exception\TransportException;
 
-class QueueDispatchException extends TransportException
-{
-}
+class QueueDispatchException extends TransportException {}

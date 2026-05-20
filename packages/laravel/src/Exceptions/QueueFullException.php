@@ -2,6 +2,4 @@
 
 namespace Pogo\Queue\Laravel\Exceptions;
 
-final class QueueFullException extends QueueDispatchException
-{
-}
+final class QueueFullException extends QueueDispatchException {}

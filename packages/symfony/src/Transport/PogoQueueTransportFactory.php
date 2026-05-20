@@ -13,11 +13,19 @@ final class PogoQueueTransportFactory implements TransportFactoryInterface
 {
     public function createTransport(string $dsn, array $options, SerializerInterface $serializer): TransportInterface
     {
-        return new PogoQueueTransport(new FrankenPhpAdapter(), $serializer);
+        return new PogoQueueTransport(new FrankenPhpAdapter(), $this->queueFromDsn($dsn), $serializer);
     }
 
     public function supports(string $dsn, array $options): bool
     {
         return str_starts_with($dsn, 'pogo-queue://');
+    }
+
+    private function queueFromDsn(string $dsn): string
+    {
+        $parts = parse_url($dsn);
+        $queue = $parts['host'] ?? trim((string) ($parts['path'] ?? ''), '/');
+
+        return $queue !== '' ? $queue : 'default';
     }
 }

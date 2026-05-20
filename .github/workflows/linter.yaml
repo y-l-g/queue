@@ -2,6 +2,7 @@
 name: Lint
 
 on:
+  pull_request:
   push:
     branches:
       - main
@@ -30,7 +31,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.5.0
           args: --timeout=5m --build-tags=nobadger,nomysql,nopgx,nowatcher
           working-directory: module
         env:
@@ -48,7 +49,9 @@ jobs:
           tools: php-cs-fixer, cs2pr
 
       - name: Run PHP-CS-Fixer
-        run: php-cs-fixer fix --dry-run --format=checkstyle | cs2pr
+        run: |
+          set -o pipefail
+          php-cs-fixer fix --dry-run --format=checkstyle | cs2pr
 
   lint-misc:
     name: Lint Misc (Yaml, MD, Bash)

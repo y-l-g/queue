@@ -1,13 +1,14 @@
 name: Build & Release
 
 on:
+  pull_request:
   push:
     branches:
       - main
     tags:
       - "v*"
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-and-test:
@@ -15,6 +16,18 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CGO_ENABLED: 1
+      POGO_REDIS_URL: redis://localhost:6379/0
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
 
     steps:
       - name: Checkout code
@@ -43,7 +56,7 @@ jobs:
           sudo apt-get install --reinstall -y libbrotli-dev
 
       - name: Install xcaddy
-        run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+        run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@v0.4.5
 
       - name: Configure CGO flags
         run: |
@@ -52,7 +65,7 @@ jobs:
 
       - name: Build Custom FrankenPHP Binary
         env:
-          XCADDY_GO_BUILD_FLAGS: "-ldflags='-w -s' -tags=nobadger,nomysql,nopgx,nowatcher"
+          XCADDY_GO_BUILD_FLAGS: "-buildvcs=false -ldflags='-w -s' -tags=nobadger,nomysql,nopgx,nowatcher"
         run: |
           xcaddy build \
             --output frankenphp-linux-x86_64 \
@@ -67,11 +80,17 @@ jobs:
         run: |
           cp frankenphp-linux-x86_64 module/frankenphp
           cd module
-          go test -v -race ./tests/...
+          go test -v -race ./... -mod=readonly
           cd ../
 
       - name: Install PHP dependencies (Root)
         run: composer install --prefer-dist --no-progress
+
+      - name: Validate Composer manifests
+        run: |
+          composer validate --strict --no-check-publish
+          composer validate --strict --no-check-publish packages/laravel/composer.json
+          composer validate --strict --no-check-publish packages/symfony/composer.json
 
       - name: Run Laravel Package Tests
         run: ./frankenphp-linux-x86_64 php-cli ./vendor/bin/phpunit -c packages/laravel/phpunit.xml.dist --bootstrap vendor/autoload.php
@@ -96,6 +115,8 @@ jobs:
     needs: build-and-test
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download Binary
         uses: actions/download-artifact@v8

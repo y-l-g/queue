@@ -1,11 +1,5 @@
 <?php
 
-/** @generate-class-entries */
-
-function pogo_queue(string $data): int
-{
-}
-
 function pogo_queue_push(string $queue, string $payload, int $delaySeconds = 0): string
 {
 }
@@ -19,9 +13,5 @@ function pogo_queue_release(string $queue, string $deliveryId, int $delaySeconds
 }
 
 function pogo_queue_fail(string $queue, string $deliveryId, string $reason = ''): int
-{
-}
-
-function pogo_queue_status(?string $queue = null): string
 {
 }
