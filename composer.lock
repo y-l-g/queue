@@ -7421,16 +7421,16 @@
         },
         {
             "name": "monorepo-php/monorepo",
-            "version": "12.7.0",
+            "version": "12.7.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/monorepo-php/monorepo.git",
-                "reference": "7331c7c338aca959253d006fb36379747fae49f6"
+                "reference": "8d7ca8a96d841febd8a2ddce58a087e9128252cc"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/monorepo-php/monorepo/zipball/7331c7c338aca959253d006fb36379747fae49f6",
-                "reference": "7331c7c338aca959253d006fb36379747fae49f6",
+                "url": "https://api.github.com/repos/monorepo-php/monorepo/zipball/8d7ca8a96d841febd8a2ddce58a087e9128252cc",
+                "reference": "8d7ca8a96d841febd8a2ddce58a087e9128252cc",
                 "shasum": ""
             },
             "bin": [
@@ -7444,9 +7444,9 @@
             "description": "monorepo-builder phar",
             "support": {
                 "issues": "https://github.com/monorepo-php/monorepo/issues",
-                "source": "https://github.com/monorepo-php/monorepo/tree/12.7.0"
+                "source": "https://github.com/monorepo-php/monorepo/tree/12.7.1"
             },
-            "time": "2026-04-24T05:51:33+00:00"
+            "time": "2026-05-20T01:30:58+00:00"
         },
         {
             "name": "myclabs/deep-copy",
