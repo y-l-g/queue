@@ -32,6 +32,7 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.5.0
+          install-mode: goinstall
           args: --timeout=5m --build-tags=nobadger,nomysql,nopgx,nowatcher
           working-directory: module
         env:

@@ -1,4 +1,4 @@
-## Go Tests
+# Go Tests
 
 Use the local FrankenPHP PHP 8.5 ZTS build when running module tests:
 
