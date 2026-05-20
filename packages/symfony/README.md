@@ -1,6 +1,6 @@
 # Pogo Queue Bundle for Symfony
 
-Symfony Messenger transport for the FrankenPHP Queue v2 module.
+Symfony Messenger transport for the FrankenPHP Queue module.
 
 The transport expects a FrankenPHP binary compiled with `pogo_queue` and a
 production `backend redis` Caddy configuration. Messages are delivered at least
@@ -20,7 +20,7 @@ The bundle registers the Messenger transport factory automatically.
 framework:
   messenger:
     transports:
-      pogo: 'pogo-queue://default'
+      pogo: "pogo-queue://default"
     routing:
       'App\Message\YourMessage': pogo
 ```

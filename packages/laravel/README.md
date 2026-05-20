@@ -1,6 +1,6 @@
 # Pogo Queue Driver for Laravel
 
-Laravel queue driver for the FrankenPHP Queue v2 module.
+Laravel queue driver for the FrankenPHP Queue module.
 
 The driver expects a FrankenPHP binary compiled with the `pogo_queue` module and
 a production `backend redis` Caddy configuration. Jobs are delivered at least
