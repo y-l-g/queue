@@ -58,6 +58,16 @@ end
 return promoted
 `)
 
+var ackMessageScript = redis.NewScript(`
+local acknowledged = redis.call("XACK", KEYS[1], ARGV[1], ARGV[2])
+if acknowledged == 0 then
+	return 0
+end
+
+redis.call("XDEL", KEYS[1], ARGV[2])
+return acknowledged
+`)
+
 func newRedisBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int, logger *slog.Logger) (*redisBackend, error) {
 	options, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
@@ -196,12 +206,15 @@ func (b *redisBackend) Ack(ctx context.Context, queue, id string) (int, error) {
 	if !b.isConfiguredQueue(queue) {
 		return dispatchResultQueueUnknown, fmt.Errorf("queue %q is not configured", queue)
 	}
-	stream := b.streamKey(queue)
-	if err := b.client.XAck(ctx, stream, b.group, id).Err(); err != nil {
+	acknowledged, err := ackMessageScript.Run(ctx, b.client, []string{b.streamKey(queue)}, b.group, id).Int64()
+	if err != nil {
 		b.stats.backendErrors.Add(1)
 		return dispatchResultBackendFailure, err
 	}
-	_ = b.client.XDel(ctx, stream, id).Err()
+	if acknowledged == 0 {
+		b.stats.backendErrors.Add(1)
+		return dispatchResultBackendFailure, fmt.Errorf("delivery %q is not pending", id)
+	}
 	b.stats.acked.Add(1)
 	return dispatchResultAccepted, nil
 }

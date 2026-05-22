@@ -248,6 +248,52 @@ func TestRedisBackendLifecycleWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestRedisAckRejectsUnknownDeliveryWhenConfigured(t *testing.T) {
+	redisURL := os.Getenv("POGO_REDIS_URL")
+	if redisURL == "" {
+		t.Skip("POGO_REDIS_URL is not set")
+	}
+
+	ctx := context.Background()
+	backend, err := newRedisBackend(
+		backendConfig{
+			RedisURL:  redisURL,
+			KeyPrefix: "pogo-test-ack-unknown",
+			Group:     "test",
+			Consumer:  "test-consumer",
+		},
+		[]string{"default"},
+		defaultMaxMessageBytes,
+		100*time.Millisecond,
+		3,
+		slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	)
+	if err != nil {
+		t.Fatalf("redis backend init failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err()
+		_ = backend.Close()
+	})
+	if err := backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err(); err != nil {
+		t.Fatalf("redis cleanup failed: %v", err)
+	}
+	if err := backend.Start(ctx); err != nil {
+		t.Fatalf("redis backend start failed: %v", err)
+	}
+
+	code, err := backend.Ack(ctx, "default", "0-0")
+	if err == nil {
+		t.Fatal("expected unknown delivery ack to fail")
+	}
+	if code != dispatchResultBackendFailure {
+		t.Fatalf("expected backend failure status, got %d", code)
+	}
+	if got := backend.stats.backendErrors.Load(); got != 1 {
+		t.Fatalf("expected one backend error, got %d", got)
+	}
+}
+
 func TestRedisPromoteDelayedIsAtomicWhenConfigured(t *testing.T) {
 	redisURL := os.Getenv("POGO_REDIS_URL")
 	if redisURL == "" {
