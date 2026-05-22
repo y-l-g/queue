@@ -68,6 +68,51 @@ redis.call("XDEL", KEYS[1], ARGV[2])
 return acknowledged
 `)
 
+var releaseMessageScript = redis.NewScript(`
+local pending = redis.call("XPENDING", KEYS[1], ARGV[1], ARGV[2], ARGV[2], 1)
+if #pending == 0 then
+	return 0
+end
+
+local messages = redis.call("XRANGE", KEYS[1], ARGV[2], ARGV[2])
+if #messages == 0 then
+	return redis.error_reply("pending redis stream message is missing")
+end
+
+local values = messages[1][2]
+local payload = nil
+local attempts = 1
+for i = 1, #values, 2 do
+	if values[i] == "payload" then
+		payload = values[i + 1]
+	elseif values[i] == "attempts" then
+		attempts = tonumber(values[i + 1]) or 1
+	end
+end
+if payload == nil then
+	return redis.error_reply("redis stream message has no payload")
+end
+
+attempts = attempts + 1
+local result = 1
+if attempts > tonumber(ARGV[4]) then
+	redis.call("XADD", KEYS[3], "*", "original_id", ARGV[2], "payload", payload, "reason", ARGV[6], "failed_at", ARGV[7])
+	result = 2
+elseif tonumber(ARGV[5]) > 0 then
+	local body = cjson.encode({id = ARGV[2], queue = ARGV[3], payload = payload, attempts = attempts})
+	redis.call("ZADD", KEYS[2], ARGV[5], body)
+else
+	redis.call("XADD", KEYS[1], "*", "payload", payload, "attempts", tostring(attempts))
+end
+
+local acknowledged = redis.call("XACK", KEYS[1], ARGV[1], ARGV[2])
+if acknowledged == 0 then
+	return 0
+end
+redis.call("XDEL", KEYS[1], ARGV[2])
+return result
+`)
+
 func newRedisBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int, logger *slog.Logger) (*redisBackend, error) {
 	options, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
@@ -220,52 +265,45 @@ func (b *redisBackend) Ack(ctx context.Context, queue, id string) (int, error) {
 }
 
 func (b *redisBackend) Release(ctx context.Context, queue, id string, delay time.Duration) (int, error) {
-	msg, err := b.getMessage(ctx, queue, id)
+	if !b.isConfiguredQueue(queue) {
+		return dispatchResultQueueUnknown, fmt.Errorf("queue %q is not configured", queue)
+	}
+
+	now := time.Now()
+	delayScore := int64(0)
+	if delay > 0 {
+		delayScore = now.Add(delay).UnixMilli()
+	}
+	result, err := releaseMessageScript.Run(
+		ctx,
+		b.client,
+		[]string{b.streamKey(queue), b.delayedKey(queue), b.failedKey(queue)},
+		b.group,
+		id,
+		queue,
+		strconv.Itoa(b.maxAttempts),
+		strconv.FormatInt(delayScore, 10),
+		"max attempts exceeded",
+		now.UTC().Format(time.RFC3339Nano),
+	).Int64()
 	if err != nil {
 		b.stats.backendErrors.Add(1)
 		return dispatchResultBackendFailure, err
 	}
 
-	payload, attempts := payloadAndAttempts(msg)
-	attempts++
-
-	if attempts > b.maxAttempts {
-		if err := b.addFailed(ctx, queue, id, payload, "max attempts exceeded"); err != nil {
-			b.stats.backendErrors.Add(1)
-			return dispatchResultBackendFailure, err
-		}
-		if err := b.ackAndDelete(ctx, queue, id); err != nil {
-			b.stats.backendErrors.Add(1)
-			return dispatchResultBackendFailure, err
-		}
+	switch result {
+	case 0:
+		b.stats.backendErrors.Add(1)
+		return dispatchResultBackendFailure, fmt.Errorf("delivery %q is not pending", id)
+	case 1:
+		b.stats.released.Add(1)
+	case 2:
 		b.stats.failed.Add(1)
-		return dispatchResultAccepted, nil
-	}
-
-	if delay > 0 {
-		body, err := json.Marshal(delayedPayload{ID: id, Queue: queue, Payload: payload, Attempts: attempts})
-		if err != nil {
-			b.stats.backendErrors.Add(1)
-			return dispatchResultBackendFailure, err
-		}
-		if err := b.client.ZAdd(ctx, b.delayedKey(queue), redis.Z{
-			Score:  float64(time.Now().Add(delay).UnixMilli()),
-			Member: string(body),
-		}).Err(); err != nil {
-			b.stats.backendErrors.Add(1)
-			return dispatchResultBackendFailure, err
-		}
-	} else if _, err := b.xadd(ctx, queue, payload, attempts); err != nil {
+	default:
 		b.stats.backendErrors.Add(1)
-		return dispatchResultBackendFailure, err
+		return dispatchResultBackendFailure, fmt.Errorf("unexpected redis release result %d", result)
 	}
 
-	if err := b.ackAndDelete(ctx, queue, id); err != nil {
-		b.stats.backendErrors.Add(1)
-		return dispatchResultBackendFailure, err
-	}
-
-	b.stats.released.Add(1)
 	return dispatchResultAccepted, nil
 }
 

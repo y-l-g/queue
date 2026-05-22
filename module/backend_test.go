@@ -243,6 +243,17 @@ func TestRedisBackendLifecycleWhenConfigured(t *testing.T) {
 	if delivery.Payload != "payload" {
 		t.Fatalf("unexpected redis payload: %#v", delivery)
 	}
+	if code, err := backend.Release(ctx, "default", delivery.ID, 0); err != nil || code != dispatchResultAccepted {
+		t.Fatalf("redis release failed: code=%d err=%v", code, err)
+	}
+
+	delivery, err = backend.Reserve(ctx, []string{"default"}, "consumer", 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("redis reserve after release failed: %v", err)
+	}
+	if delivery.Payload != "payload" || delivery.Attempts != 2 {
+		t.Fatalf("unexpected redis delivery after release: %#v", delivery)
+	}
 	if code, err := backend.Ack(ctx, "default", delivery.ID); err != nil || code != dispatchResultAccepted {
 		t.Fatalf("redis ack failed: code=%d err=%v", code, err)
 	}
@@ -288,6 +299,65 @@ func TestRedisAckRejectsUnknownDeliveryWhenConfigured(t *testing.T) {
 	}
 	if code != dispatchResultBackendFailure {
 		t.Fatalf("expected backend failure status, got %d", code)
+	}
+	if got := backend.stats.backendErrors.Load(); got != 1 {
+		t.Fatalf("expected one backend error, got %d", got)
+	}
+}
+
+func TestRedisReleaseRejectsUnreservedDeliveryWhenConfigured(t *testing.T) {
+	redisURL := os.Getenv("POGO_REDIS_URL")
+	if redisURL == "" {
+		t.Skip("POGO_REDIS_URL is not set")
+	}
+
+	ctx := context.Background()
+	backend, err := newRedisBackend(
+		backendConfig{
+			RedisURL:  redisURL,
+			KeyPrefix: "pogo-test-release-unreserved",
+			Group:     "test",
+			Consumer:  "test-consumer",
+		},
+		[]string{"default"},
+		defaultMaxMessageBytes,
+		100*time.Millisecond,
+		3,
+		slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	)
+	if err != nil {
+		t.Fatalf("redis backend init failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err()
+		_ = backend.Close()
+	})
+	if err := backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err(); err != nil {
+		t.Fatalf("redis cleanup failed: %v", err)
+	}
+	if err := backend.Start(ctx); err != nil {
+		t.Fatalf("redis backend start failed: %v", err)
+	}
+
+	id, code, err := backend.Enqueue(ctx, "default", "payload", 0)
+	if err != nil || code != dispatchResultAccepted {
+		t.Fatalf("redis enqueue failed: code=%d err=%v", code, err)
+	}
+
+	code, err = backend.Release(ctx, "default", id, 0)
+	if err == nil {
+		t.Fatal("expected unreserved delivery release to fail")
+	}
+	if code != dispatchResultBackendFailure {
+		t.Fatalf("expected backend failure status, got %d", code)
+	}
+
+	streamLen, err := backend.client.XLen(ctx, backend.streamKey("default")).Result()
+	if err != nil {
+		t.Fatalf("read stream length failed: %v", err)
+	}
+	if streamLen != 1 {
+		t.Fatalf("expected original stream message to remain, got %d messages", streamLen)
 	}
 	if got := backend.stats.backendErrors.Load(); got != 1 {
 		t.Fatalf("expected one backend error, got %d", got)
