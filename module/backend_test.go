@@ -43,7 +43,6 @@ func TestMemoryBackendLifecycle(t *testing.T) {
 		defaultMaxMessageBytes,
 		time.Minute,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 
 	id, code, err := backend.Enqueue(ctx, "default", "payload", 0)
@@ -96,7 +95,6 @@ func TestMemoryBackendRejectsOversizedPayload(t *testing.T) {
 		4,
 		time.Minute,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 
 	_, code, err := backend.Enqueue(context.Background(), "default", "payload", 0)
@@ -116,7 +114,6 @@ func TestManagerDoesNotReserveBeforeStart(t *testing.T) {
 		defaultMaxMessageBytes,
 		time.Minute,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if _, code, err := backend.Enqueue(ctx, "default", "payload", 0); err != nil || code != dispatchResultAccepted {
 		t.Fatalf("enqueue failed: code=%d err=%v", code, err)
@@ -165,7 +162,6 @@ func TestManagerReservesAfterStart(t *testing.T) {
 		defaultMaxMessageBytes,
 		time.Minute,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if _, code, err := backend.Enqueue(ctx, "default", "payload", 0); err != nil || code != dispatchResultAccepted {
 		t.Fatalf("enqueue failed: code=%d err=%v", code, err)
@@ -219,7 +215,6 @@ func TestRedisBackendLifecycleWhenConfigured(t *testing.T) {
 		defaultMaxMessageBytes,
 		100*time.Millisecond,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if err != nil {
 		t.Fatalf("redis backend init failed: %v", err)
@@ -277,7 +272,6 @@ func TestRedisReserveWithZeroWaitPollsOnceWhenConfigured(t *testing.T) {
 		defaultMaxMessageBytes,
 		100*time.Millisecond,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if err != nil {
 		t.Fatalf("redis backend init failed: %v", err)
@@ -323,7 +317,6 @@ func TestRedisStatsDoNotDoubleCountReservedMessagesWhenConfigured(t *testing.T) 
 		defaultMaxMessageBytes,
 		100*time.Millisecond,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if err != nil {
 		t.Fatalf("redis backend init failed: %v", err)
@@ -378,7 +371,6 @@ func TestRedisAckRejectsUnknownDeliveryWhenConfigured(t *testing.T) {
 		defaultMaxMessageBytes,
 		100*time.Millisecond,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if err != nil {
 		t.Fatalf("redis backend init failed: %v", err)
@@ -424,7 +416,6 @@ func TestRedisReleaseRejectsUnreservedDeliveryWhenConfigured(t *testing.T) {
 		defaultMaxMessageBytes,
 		100*time.Millisecond,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if err != nil {
 		t.Fatalf("redis backend init failed: %v", err)
@@ -483,7 +474,6 @@ func TestRedisFailMovesReservedDeliveryWhenConfigured(t *testing.T) {
 		defaultMaxMessageBytes,
 		100*time.Millisecond,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if err != nil {
 		t.Fatalf("redis backend init failed: %v", err)
@@ -551,7 +541,6 @@ func TestRedisFailRejectsUnreservedDeliveryWhenConfigured(t *testing.T) {
 		defaultMaxMessageBytes,
 		100*time.Millisecond,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if err != nil {
 		t.Fatalf("redis backend init failed: %v", err)
@@ -617,7 +606,6 @@ func TestRedisStaleClaimIncrementsAttemptsWhenConfigured(t *testing.T) {
 		defaultMaxMessageBytes,
 		time.Millisecond,
 		5,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if err != nil {
 		t.Fatalf("redis backend init failed: %v", err)
@@ -691,7 +679,6 @@ func TestRedisStaleClaimFailsAfterMaxAttemptsWhenConfigured(t *testing.T) {
 		defaultMaxMessageBytes,
 		time.Millisecond,
 		1,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if err != nil {
 		t.Fatalf("redis backend init failed: %v", err)
@@ -762,7 +749,6 @@ func TestRedisPromoteDelayedIsAtomicWhenConfigured(t *testing.T) {
 		defaultMaxMessageBytes,
 		100*time.Millisecond,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if err != nil {
 		t.Fatalf("redis backend init failed: %v", err)
@@ -778,7 +764,6 @@ func TestRedisPromoteDelayedIsAtomicWhenConfigured(t *testing.T) {
 		defaultMaxMessageBytes,
 		100*time.Millisecond,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if err != nil {
 		_ = backendA.Close()
@@ -879,7 +864,6 @@ func TestRedisReserveReportsPromoteDelayedErrorsWhenConfigured(t *testing.T) {
 		defaultMaxMessageBytes,
 		100*time.Millisecond,
 		3,
-		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	)
 	if err != nil {
 		t.Fatalf("redis backend init failed: %v", err)

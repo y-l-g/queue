@@ -72,7 +72,6 @@ func (g *Queue) Provision(ctx caddy.Context) error {
 		g.MaxPayloadBytes,
 		time.Duration(g.VisibilityTimeout),
 		g.MaxAttempts,
-		ctx.Slogger(),
 	)
 	if err != nil {
 		return err

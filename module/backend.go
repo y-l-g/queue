@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -76,7 +75,7 @@ type backendConfig struct {
 	MaxTotalBytes int    `json:"max_total_bytes,omitempty"`
 }
 
-func newBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int, logger *slog.Logger) (backend, error) {
+func newBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int) (backend, error) {
 	if cfg.Type == "" {
 		cfg.Type = "redis"
 	}
@@ -102,7 +101,7 @@ func newBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibil
 			}
 			cfg.Consumer = host + "-" + strconv.Itoa(os.Getpid())
 		}
-		return newRedisBackend(cfg, queues, maxPayloadBytes, visibilityTimeout, maxAttempts, logger)
+		return newRedisBackend(cfg, queues, maxPayloadBytes, visibilityTimeout, maxAttempts)
 	case "memory":
 		if cfg.MaxMessages <= 0 {
 			cfg.MaxMessages = 1_000
@@ -110,7 +109,7 @@ func newBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibil
 		if cfg.MaxTotalBytes <= 0 {
 			cfg.MaxTotalBytes = 64 << 20
 		}
-		return newMemoryBackend(cfg, queues, maxPayloadBytes, visibilityTimeout, maxAttempts, logger), nil
+		return newMemoryBackend(cfg, queues, maxPayloadBytes, visibilityTimeout, maxAttempts), nil
 	default:
 		return nil, fmt.Errorf("unsupported pogo_queue backend %q", cfg.Type)
 	}

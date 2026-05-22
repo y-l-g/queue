@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -24,7 +23,6 @@ type redisBackend struct {
 	maxPayloadBytes   int
 	visibilityTimeout time.Duration
 	maxAttempts       int
-	logger            *slog.Logger
 	stats             backendCounters
 	delayedID         atomic.Uint64
 }
@@ -145,7 +143,7 @@ redis.call("XDEL", KEYS[1], ARGV[2])
 return 1
 `)
 
-func newRedisBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int, logger *slog.Logger) (*redisBackend, error) {
+func newRedisBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int) (*redisBackend, error) {
 	options, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid redis url: %w", err)
@@ -167,7 +165,6 @@ func newRedisBackend(cfg backendConfig, queues []string, maxPayloadBytes int, vi
 		maxPayloadBytes:   maxPayloadBytes,
 		visibilityTimeout: visibilityTimeout,
 		maxAttempts:       maxAttempts,
-		logger:            logger,
 	}, nil
 }
 

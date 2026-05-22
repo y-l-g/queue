@@ -3,7 +3,6 @@ package queue
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,7 +29,6 @@ type memoryBackend struct {
 	maxTotalBytes     int
 	visibilityTimeout time.Duration
 	maxAttempts       int
-	logger            *slog.Logger
 	nextID            atomic.Uint64
 	totalBytes        int
 	stats             backendCounters
@@ -47,7 +45,7 @@ type backendCounters struct {
 	backendErrors   atomic.Uint64
 }
 
-func newMemoryBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int, logger *slog.Logger) *memoryBackend {
+func newMemoryBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int) *memoryBackend {
 	b := &memoryBackend{
 		queues:            make(map[string]*memoryQueue, len(queues)),
 		maxPayloadBytes:   maxPayloadBytes,
@@ -55,7 +53,6 @@ func newMemoryBackend(cfg backendConfig, queues []string, maxPayloadBytes int, v
 		maxTotalBytes:     cfg.MaxTotalBytes,
 		visibilityTimeout: visibilityTimeout,
 		maxAttempts:       maxAttempts,
-		logger:            logger,
 	}
 	for _, queue := range queues {
 		b.queues[queue] = newMemoryQueue()
