@@ -173,6 +173,7 @@ func (b *memoryBackend) Ack(_ context.Context, queue, id string) (int, error) {
 	}
 	msg, ok := q.pending[id]
 	if !ok {
+		b.stats.backendErrors.Add(1)
 		return dispatchResultBackendFailure, fmt.Errorf("delivery %q is not pending", id)
 	}
 	delete(q.pending, id)
@@ -191,6 +192,7 @@ func (b *memoryBackend) Release(_ context.Context, queue, id string, delay time.
 	}
 	msg, ok := q.pending[id]
 	if !ok {
+		b.stats.backendErrors.Add(1)
 		return dispatchResultBackendFailure, fmt.Errorf("delivery %q is not pending", id)
 	}
 	delete(q.pending, id)
@@ -221,6 +223,7 @@ func (b *memoryBackend) Fail(_ context.Context, queue, id, _ string) (int, error
 	}
 	msg, ok := q.pending[id]
 	if !ok {
+		b.stats.backendErrors.Add(1)
 		return dispatchResultBackendFailure, fmt.Errorf("delivery %q is not pending", id)
 	}
 	delete(q.pending, id)

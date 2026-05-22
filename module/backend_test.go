@@ -106,6 +106,30 @@ func TestMemoryBackendRejectsOversizedPayload(t *testing.T) {
 	}
 }
 
+func TestMemoryBackendCountsInvalidLifecycleErrors(t *testing.T) {
+	ctx := context.Background()
+	backend := newMemoryBackend(
+		backendConfig{MaxMessages: 10, MaxTotalBytes: 1 << 20},
+		[]string{"default"},
+		defaultMaxMessageBytes,
+		time.Minute,
+		3,
+	)
+
+	if code, err := backend.Ack(ctx, "default", "missing"); err == nil || code != dispatchResultBackendFailure {
+		t.Fatalf("expected ack failure, got code=%d err=%v", code, err)
+	}
+	if code, err := backend.Release(ctx, "default", "missing", 0); err == nil || code != dispatchResultBackendFailure {
+		t.Fatalf("expected release failure, got code=%d err=%v", code, err)
+	}
+	if code, err := backend.Fail(ctx, "default", "missing", "boom"); err == nil || code != dispatchResultBackendFailure {
+		t.Fatalf("expected fail failure, got code=%d err=%v", code, err)
+	}
+	if got := backend.stats.backendErrors.Load(); got != 3 {
+		t.Fatalf("expected three backend errors, got %d", got)
+	}
+}
+
 func TestManagerDoesNotReserveBeforeStart(t *testing.T) {
 	ctx := context.Background()
 	backend := newMemoryBackend(
