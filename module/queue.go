@@ -36,8 +36,11 @@ type manager struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	wg              sync.WaitGroup
+	lifecycleMu     sync.Mutex
 	closing         atomic.Bool
+	started         atomic.Bool
 	droppedShutdown atomic.Uint64
+	startOnce       sync.Once
 	once            sync.Once
 }
 
@@ -109,12 +112,24 @@ func newManager(b backend, w frankenphp.Workers, logger *slog.Logger, queues []s
 		cancel:            cancel,
 	}
 
-	for i := 0; i < concurrency; i++ {
-		m.wg.Add(1)
-		go m.loop(i + 1)
-	}
-
 	return m
+}
+
+func (m *manager) start() {
+	m.startOnce.Do(func() {
+		m.lifecycleMu.Lock()
+		defer m.lifecycleMu.Unlock()
+
+		if m.closing.Load() {
+			return
+		}
+
+		m.started.Store(true)
+		for i := 0; i < m.concurrency; i++ {
+			m.wg.Add(1)
+			go m.loop(i + 1)
+		}
+	})
 }
 
 func (m *manager) loop(workerIndex int) {
@@ -176,8 +191,10 @@ func (m *manager) handleDeliveryError(msg *delivery, err error) error {
 
 func (m *manager) shutdown() {
 	m.once.Do(func() {
+		m.lifecycleMu.Lock()
 		m.closing.Store(true)
 		m.cancel()
+		m.lifecycleMu.Unlock()
 
 		done := make(chan struct{})
 		go func() {
@@ -201,6 +218,9 @@ func (m *manager) enqueue(ctx context.Context, queue, payload string, delay time
 	if m.closing.Load() {
 		m.droppedShutdown.Add(1)
 		return "", dispatchResultShuttingDown, fmt.Errorf("pogo_queue is shutting down")
+	}
+	if !m.started.Load() {
+		return "", dispatchResultWorkerUnavailable, fmt.Errorf("pogo_queue worker is unavailable")
 	}
 	return m.backend.Enqueue(ctx, queue, payload, delay)
 }
@@ -227,7 +247,7 @@ func (m *manager) status(ctx context.Context, queue string) statusPayload {
 	}
 
 	return statusPayload{
-		Ready:  !m.closing.Load(),
+		Ready:  m.started.Load() && !m.closing.Load(),
 		Queues: stats,
 	}
 }

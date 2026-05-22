@@ -8,6 +8,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
+	"github.com/dunglas/frankenphp"
 	frankenphpCaddy "github.com/dunglas/frankenphp/caddy"
 )
 
@@ -83,11 +84,11 @@ func (g *Queue) Provision(ctx caddy.Context) error {
 	if workerThreads <= 0 {
 		workerThreads = g.Concurrency
 	}
-	workers := frankenphpCaddy.RegisterWorkers("pogo_queue", g.Worker, workerThreads)
-
 	g.manager = newManager(
 		b,
-		workers,
+		frankenphpCaddy.RegisterWorkers("pogo_queue", g.Worker, workerThreads, frankenphp.WithWorkerOnServerStartup(func() {
+			g.manager.start()
+		})),
 		ctx.Slogger(),
 		g.Queues,
 		g.Backend.Consumer,
