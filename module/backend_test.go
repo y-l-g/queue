@@ -2,11 +2,15 @@ package queue
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type fakeWorkers struct {
@@ -240,5 +244,122 @@ func TestRedisBackendLifecycleWhenConfigured(t *testing.T) {
 	}
 	if code, err := backend.Ack(ctx, "default", delivery.ID); err != nil || code != dispatchResultAccepted {
 		t.Fatalf("redis ack failed: code=%d err=%v", code, err)
+	}
+}
+
+func TestRedisPromoteDelayedIsAtomicWhenConfigured(t *testing.T) {
+	redisURL := os.Getenv("POGO_REDIS_URL")
+	if redisURL == "" {
+		t.Skip("POGO_REDIS_URL is not set")
+	}
+
+	ctx := context.Background()
+	backendA, err := newRedisBackend(
+		backendConfig{
+			RedisURL:  redisURL,
+			KeyPrefix: "pogo-test-promote-atomic",
+			Group:     "test",
+			Consumer:  "test-consumer-a",
+		},
+		[]string{"default"},
+		defaultMaxMessageBytes,
+		100*time.Millisecond,
+		3,
+		slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	)
+	if err != nil {
+		t.Fatalf("redis backend init failed: %v", err)
+	}
+	backendB, err := newRedisBackend(
+		backendConfig{
+			RedisURL:  redisURL,
+			KeyPrefix: "pogo-test-promote-atomic",
+			Group:     "test",
+			Consumer:  "test-consumer-b",
+		},
+		[]string{"default"},
+		defaultMaxMessageBytes,
+		100*time.Millisecond,
+		3,
+		slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	)
+	if err != nil {
+		_ = backendA.Close()
+		t.Fatalf("redis backend init failed: %v", err)
+	}
+
+	keys := []string{backendA.streamKey("default"), backendA.delayedKey("default"), backendA.failedKey("default")}
+	if err := backendA.client.Del(ctx, keys...).Err(); err != nil {
+		t.Fatalf("redis cleanup failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = backendA.client.Del(ctx, keys...).Err()
+		_ = backendA.Close()
+		_ = backendB.Close()
+	})
+
+	if err := backendA.Start(ctx); err != nil {
+		t.Fatalf("redis backend start failed: %v", err)
+	}
+	if err := backendB.Start(ctx); err != nil {
+		t.Fatalf("redis backend start failed: %v", err)
+	}
+
+	body, err := json.Marshal(delayedPayload{
+		ID:       "delayed-atomic-test",
+		Queue:    "default",
+		Payload:  "payload",
+		Attempts: 1,
+	})
+	if err != nil {
+		t.Fatalf("marshal delayed payload failed: %v", err)
+	}
+	if err := backendA.client.ZAdd(ctx, backendA.delayedKey("default"), redis.Z{
+		Score:  float64(time.Now().Add(-time.Second).UnixMilli()),
+		Member: string(body),
+	}).Err(); err != nil {
+		t.Fatalf("seed delayed payload failed: %v", err)
+	}
+
+	const promoters = 50
+	start := make(chan struct{})
+	errs := make(chan error, promoters)
+	var wg sync.WaitGroup
+	for i := 0; i < promoters; i++ {
+		backend := backendA
+		if i%2 == 1 {
+			backend = backendB
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if err := backend.promoteDelayed(ctx, "default", 100); err != nil {
+				errs <- err
+			}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("promote delayed failed: %v", err)
+	}
+
+	streamLen, err := backendA.client.XLen(ctx, backendA.streamKey("default")).Result()
+	if err != nil {
+		t.Fatalf("read stream length failed: %v", err)
+	}
+	if streamLen != 1 {
+		t.Fatalf("expected one promoted stream message, got %d", streamLen)
+	}
+
+	delayedLen, err := backendA.client.ZCard(ctx, backendA.delayedKey("default")).Result()
+	if err != nil {
+		t.Fatalf("read delayed length failed: %v", err)
+	}
+	if delayedLen != 0 {
+		t.Fatalf("expected delayed set to be empty, got %d", delayedLen)
 	}
 }

@@ -36,6 +36,28 @@ type delayedPayload struct {
 	Attempts int    `json:"attempts"`
 }
 
+var promoteDelayedScript = redis.NewScript(`
+local items = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, ARGV[2])
+local promoted = 0
+
+for _, item in ipairs(items) do
+	local ok, delayed = pcall(cjson.decode, item)
+	if ok and type(delayed) == "table" and type(delayed["payload"]) == "string" then
+		local attempts = tonumber(delayed["attempts"]) or 1
+		if attempts < 1 then
+			attempts = 1
+		end
+
+		redis.call("XADD", KEYS[2], "*", "payload", delayed["payload"], "attempts", tostring(math.floor(attempts)))
+		promoted = promoted + 1
+	end
+
+	redis.call("ZREM", KEYS[1], item)
+end
+
+return promoted
+`)
+
 func newRedisBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int, logger *slog.Logger) (*redisBackend, error) {
 	options, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
@@ -314,28 +336,18 @@ func (b *redisBackend) xadd(ctx context.Context, queue, payload string, attempts
 }
 
 func (b *redisBackend) promoteDelayed(ctx context.Context, queue string, limit int64) error {
-	now := time.Now().UnixMilli()
-	items, err := b.client.ZRangeByScore(ctx, b.delayedKey(queue), &redis.ZRangeBy{
-		Min:   "-inf",
-		Max:   strconv.FormatInt(now, 10),
-		Count: limit,
-	}).Result()
-	if err != nil {
-		return err
+	if limit <= 0 {
+		return nil
 	}
 
-	for _, item := range items {
-		var delayed delayedPayload
-		if err := json.Unmarshal([]byte(item), &delayed); err != nil {
-			_ = b.client.ZRem(ctx, b.delayedKey(queue), item).Err()
-			continue
-		}
-		if _, err := b.xadd(ctx, delayed.Queue, delayed.Payload, delayed.Attempts); err != nil {
-			return err
-		}
-		_ = b.client.ZRem(ctx, b.delayedKey(queue), item).Err()
-	}
-	return nil
+	_, err := promoteDelayedScript.Run(
+		ctx,
+		b.client,
+		[]string{b.delayedKey(queue), b.streamKey(queue)},
+		strconv.FormatInt(time.Now().UnixMilli(), 10),
+		strconv.FormatInt(limit, 10),
+	).Result()
+	return err
 }
 
 func (b *redisBackend) claimStale(ctx context.Context, queue, consumer string) (redis.XMessage, bool, error) {
