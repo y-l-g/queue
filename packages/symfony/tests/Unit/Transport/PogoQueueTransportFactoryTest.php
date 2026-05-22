@@ -157,6 +157,22 @@ final class PogoQueueTransportFactoryTest extends TestCase
         $this->assertSame([], $items);
     }
 
+    public function testGetFailsMalformedDeliveryWhenItHasDeliveryId(): void
+    {
+        $adapter = new FakeAdapter();
+        $adapter->nextReceivedMessage = json_encode([
+            'id' => '1-0',
+            'queue' => 'default',
+            'attempts' => 1,
+        ], JSON_THROW_ON_ERROR);
+
+        $transport = new PogoQueueTransport($adapter, 'default', new FakeSerializer());
+
+        $items = iterator_to_array($transport->get());
+        $this->assertSame([], $items);
+        $this->assertSame([['default', '1-0', 'Malformed queue delivery.']], $adapter->failed);
+    }
+
     public function testAckCallsBackend(): void
     {
         $adapter = new FakeAdapter();

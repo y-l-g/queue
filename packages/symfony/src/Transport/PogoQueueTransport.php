@@ -26,12 +26,15 @@ final class PogoQueueTransport implements TransportInterface
 
         $this->adapter->handle(function (string $message) use (&$envelope) {
             $delivery = json_decode($message, true);
-            if (!is_array($delivery) || !is_string($delivery['payload'] ?? null)) {
+            $queue = is_array($delivery) && is_string($delivery['queue'] ?? null) ? $delivery['queue'] : $this->queue;
+            $deliveryId = is_array($delivery) && is_string($delivery['id'] ?? null) ? $delivery['id'] : '';
+            if (!is_array($delivery) || !is_string($delivery['payload'] ?? null) || $deliveryId === '') {
+                if ($deliveryId !== '') {
+                    $this->adapter->fail($queue, $deliveryId, 'Malformed queue delivery.');
+                }
                 return;
             }
 
-            $queue = (string) ($delivery['queue'] ?? $this->queue);
-            $deliveryId = (string) ($delivery['id'] ?? '');
             $attempts = (int) ($delivery['attempts'] ?? 1);
 
             try {
