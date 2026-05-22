@@ -392,6 +392,11 @@ func (b *redisBackend) Stats(ctx context.Context, queue string) (queueStats, err
 	if p, err := b.client.XPending(ctx, stream, b.group).Result(); err == nil && p != nil {
 		reserved = p.Count
 	}
+	if pending >= reserved {
+		pending -= reserved
+	} else {
+		pending = 0
+	}
 
 	return queueStats{
 		Queue:           queue,

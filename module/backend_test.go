@@ -305,6 +305,61 @@ func TestRedisReserveWithZeroWaitPollsOnceWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestRedisStatsDoNotDoubleCountReservedMessagesWhenConfigured(t *testing.T) {
+	redisURL := os.Getenv("POGO_REDIS_URL")
+	if redisURL == "" {
+		t.Skip("POGO_REDIS_URL is not set")
+	}
+
+	ctx := context.Background()
+	backend, err := newRedisBackend(
+		backendConfig{
+			RedisURL:  redisURL,
+			KeyPrefix: "pogo-test-stats-reserved",
+			Group:     "test",
+			Consumer:  "test-consumer",
+		},
+		[]string{"default"},
+		defaultMaxMessageBytes,
+		100*time.Millisecond,
+		3,
+		slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	)
+	if err != nil {
+		t.Fatalf("redis backend init failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err()
+		_ = backend.Close()
+	})
+	if err := backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err(); err != nil {
+		t.Fatalf("redis cleanup failed: %v", err)
+	}
+	if err := backend.Start(ctx); err != nil {
+		t.Fatalf("redis backend start failed: %v", err)
+	}
+
+	if _, code, err := backend.Enqueue(ctx, "default", "payload", 0); err != nil || code != dispatchResultAccepted {
+		t.Fatalf("redis enqueue failed: code=%d err=%v", code, err)
+	}
+	delivery, err := backend.Reserve(ctx, []string{"default"}, "consumer", 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("redis reserve failed: %v", err)
+	}
+
+	stats, err := backend.Stats(ctx, "default")
+	if err != nil {
+		t.Fatalf("redis stats failed: %v", err)
+	}
+	if stats.Pending != 0 || stats.Reserved != 1 {
+		t.Fatalf("expected pending=0 reserved=1, got pending=%d reserved=%d", stats.Pending, stats.Reserved)
+	}
+
+	if code, err := backend.Ack(ctx, "default", delivery.ID); err != nil || code != dispatchResultAccepted {
+		t.Fatalf("redis ack failed: code=%d err=%v", code, err)
+	}
+}
+
 func TestRedisAckRejectsUnknownDeliveryWhenConfigured(t *testing.T) {
 	redisURL := os.Getenv("POGO_REDIS_URL")
 	if redisURL == "" {
