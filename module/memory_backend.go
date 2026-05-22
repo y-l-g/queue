@@ -24,7 +24,6 @@ type memoryQueue struct {
 
 type memoryBackend struct {
 	mu                sync.Mutex
-	cond              *sync.Cond
 	queues            map[string]*memoryQueue
 	maxPayloadBytes   int
 	maxMessages       int
@@ -58,7 +57,6 @@ func newMemoryBackend(cfg backendConfig, queues []string, maxPayloadBytes int, v
 		maxAttempts:       maxAttempts,
 		logger:            logger,
 	}
-	b.cond = sync.NewCond(&b.mu)
 	for _, queue := range queues {
 		b.queues[queue] = newMemoryQueue()
 	}
@@ -114,7 +112,6 @@ func (b *memoryBackend) Enqueue(_ context.Context, queue, payload string, delay 
 		q.ready = append(q.ready, msg)
 	}
 	b.stats.enqueued.Add(1)
-	b.cond.Broadcast()
 
 	return id, dispatchResultAccepted, nil
 }
@@ -214,7 +211,6 @@ func (b *memoryBackend) Release(_ context.Context, queue, id string, delay time.
 		q.ready = append(q.ready, msg)
 	}
 	b.stats.released.Add(1)
-	b.cond.Broadcast()
 	return dispatchResultAccepted, nil
 }
 
