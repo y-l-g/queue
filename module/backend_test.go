@@ -353,6 +353,60 @@ func TestRedisStatsDoNotDoubleCountReservedMessagesWhenConfigured(t *testing.T) 
 	}
 }
 
+func TestRedisReadPathsSkipUnknownQueuesWhenConfigured(t *testing.T) {
+	redisURL := os.Getenv("POGO_REDIS_URL")
+	if redisURL == "" {
+		t.Skip("POGO_REDIS_URL is not set")
+	}
+
+	ctx := context.Background()
+	backend, err := newRedisBackend(
+		backendConfig{
+			RedisURL:  redisURL,
+			KeyPrefix: "pogo-test-unknown-read",
+			Group:     "test",
+			Consumer:  "test-consumer",
+		},
+		[]string{"default"},
+		defaultMaxMessageBytes,
+		100*time.Millisecond,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("redis backend init failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err()
+		_ = backend.client.Del(ctx, backend.streamKey("unknown"), backend.delayedKey("unknown"), backend.failedKey("unknown")).Err()
+		_ = backend.Close()
+	})
+	if err := backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err(); err != nil {
+		t.Fatalf("redis cleanup failed: %v", err)
+	}
+	if err := backend.client.Del(ctx, backend.streamKey("unknown"), backend.delayedKey("unknown"), backend.failedKey("unknown")).Err(); err != nil {
+		t.Fatalf("redis cleanup failed: %v", err)
+	}
+	if err := backend.Start(ctx); err != nil {
+		t.Fatalf("redis backend start failed: %v", err)
+	}
+
+	delivery, err := backend.Reserve(ctx, []string{"unknown"}, "consumer", 0)
+	if !errors.Is(err, errQueueEmpty) {
+		t.Fatalf("expected empty queue for unknown reserve, got delivery=%#v err=%v", delivery, err)
+	}
+
+	stats, err := backend.Stats(ctx, "unknown")
+	if err != nil {
+		t.Fatalf("redis stats for unknown queue failed: %v", err)
+	}
+	if stats.Queue != "unknown" || stats.Ready {
+		t.Fatalf("expected unknown queue to be not ready, got %#v", stats)
+	}
+	if stats.MaxPayloadBytes != defaultMaxMessageBytes {
+		t.Fatalf("expected max payload bytes to be reported, got %d", stats.MaxPayloadBytes)
+	}
+}
+
 func TestRedisAckRejectsUnknownDeliveryWhenConfigured(t *testing.T) {
 	redisURL := os.Getenv("POGO_REDIS_URL")
 	if redisURL == "" {

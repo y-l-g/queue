@@ -223,6 +223,9 @@ func (b *redisBackend) Reserve(ctx context.Context, queues []string, consumer st
 	}
 
 	for _, queue := range queues {
+		if !b.isConfiguredQueue(queue) {
+			continue
+		}
 		if err := b.promoteDelayed(ctx, queue, 100); err != nil {
 			b.stats.backendErrors.Add(1)
 			return nil, err
@@ -372,6 +375,10 @@ func (b *redisBackend) Fail(ctx context.Context, queue, id, reason string) (int,
 }
 
 func (b *redisBackend) Stats(ctx context.Context, queue string) (queueStats, error) {
+	if !b.isConfiguredQueue(queue) {
+		return queueStats{Queue: queue, Ready: false, MaxPayloadBytes: b.maxPayloadBytes}, nil
+	}
+
 	stream := b.streamKey(queue)
 	pending, err := b.client.XLen(ctx, stream).Result()
 	if err != nil {
