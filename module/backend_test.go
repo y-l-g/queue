@@ -364,6 +364,140 @@ func TestRedisReleaseRejectsUnreservedDeliveryWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestRedisFailMovesReservedDeliveryWhenConfigured(t *testing.T) {
+	redisURL := os.Getenv("POGO_REDIS_URL")
+	if redisURL == "" {
+		t.Skip("POGO_REDIS_URL is not set")
+	}
+
+	ctx := context.Background()
+	backend, err := newRedisBackend(
+		backendConfig{
+			RedisURL:  redisURL,
+			KeyPrefix: "pogo-test-fail-reserved",
+			Group:     "test",
+			Consumer:  "test-consumer",
+		},
+		[]string{"default"},
+		defaultMaxMessageBytes,
+		100*time.Millisecond,
+		3,
+		slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	)
+	if err != nil {
+		t.Fatalf("redis backend init failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err()
+		_ = backend.Close()
+	})
+	if err := backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err(); err != nil {
+		t.Fatalf("redis cleanup failed: %v", err)
+	}
+	if err := backend.Start(ctx); err != nil {
+		t.Fatalf("redis backend start failed: %v", err)
+	}
+
+	if _, code, err := backend.Enqueue(ctx, "default", "payload", 0); err != nil || code != dispatchResultAccepted {
+		t.Fatalf("redis enqueue failed: code=%d err=%v", code, err)
+	}
+	delivery, err := backend.Reserve(ctx, []string{"default"}, "consumer", 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("redis reserve failed: %v", err)
+	}
+
+	if code, err := backend.Fail(ctx, "default", delivery.ID, "boom"); err != nil || code != dispatchResultAccepted {
+		t.Fatalf("redis fail failed: code=%d err=%v", code, err)
+	}
+
+	streamLen, err := backend.client.XLen(ctx, backend.streamKey("default")).Result()
+	if err != nil {
+		t.Fatalf("read stream length failed: %v", err)
+	}
+	if streamLen != 0 {
+		t.Fatalf("expected original stream to be empty, got %d messages", streamLen)
+	}
+	failed, err := backend.client.XRange(ctx, backend.failedKey("default"), "-", "+").Result()
+	if err != nil {
+		t.Fatalf("read failed stream failed: %v", err)
+	}
+	if len(failed) != 1 {
+		t.Fatalf("expected one failed message, got %d", len(failed))
+	}
+	if failed[0].Values["original_id"] != delivery.ID || failed[0].Values["payload"] != "payload" || failed[0].Values["reason"] != "boom" {
+		t.Fatalf("unexpected failed message: %#v", failed[0].Values)
+	}
+	if got := backend.stats.failed.Load(); got != 1 {
+		t.Fatalf("expected one failed counter, got %d", got)
+	}
+}
+
+func TestRedisFailRejectsUnreservedDeliveryWhenConfigured(t *testing.T) {
+	redisURL := os.Getenv("POGO_REDIS_URL")
+	if redisURL == "" {
+		t.Skip("POGO_REDIS_URL is not set")
+	}
+
+	ctx := context.Background()
+	backend, err := newRedisBackend(
+		backendConfig{
+			RedisURL:  redisURL,
+			KeyPrefix: "pogo-test-fail-unreserved",
+			Group:     "test",
+			Consumer:  "test-consumer",
+		},
+		[]string{"default"},
+		defaultMaxMessageBytes,
+		100*time.Millisecond,
+		3,
+		slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	)
+	if err != nil {
+		t.Fatalf("redis backend init failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err()
+		_ = backend.Close()
+	})
+	if err := backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err(); err != nil {
+		t.Fatalf("redis cleanup failed: %v", err)
+	}
+	if err := backend.Start(ctx); err != nil {
+		t.Fatalf("redis backend start failed: %v", err)
+	}
+
+	id, code, err := backend.Enqueue(ctx, "default", "payload", 0)
+	if err != nil || code != dispatchResultAccepted {
+		t.Fatalf("redis enqueue failed: code=%d err=%v", code, err)
+	}
+
+	code, err = backend.Fail(ctx, "default", id, "boom")
+	if err == nil {
+		t.Fatal("expected unreserved delivery fail to fail")
+	}
+	if code != dispatchResultBackendFailure {
+		t.Fatalf("expected backend failure status, got %d", code)
+	}
+
+	streamLen, err := backend.client.XLen(ctx, backend.streamKey("default")).Result()
+	if err != nil {
+		t.Fatalf("read stream length failed: %v", err)
+	}
+	if streamLen != 1 {
+		t.Fatalf("expected original stream message to remain, got %d messages", streamLen)
+	}
+	failedLen, err := backend.client.XLen(ctx, backend.failedKey("default")).Result()
+	if err != nil {
+		t.Fatalf("read failed stream length failed: %v", err)
+	}
+	if failedLen != 0 {
+		t.Fatalf("expected failed stream to remain empty, got %d messages", failedLen)
+	}
+	if got := backend.stats.backendErrors.Load(); got != 1 {
+		t.Fatalf("expected one backend error, got %d", got)
+	}
+}
+
 func TestRedisPromoteDelayedIsAtomicWhenConfigured(t *testing.T) {
 	redisURL := os.Getenv("POGO_REDIS_URL")
 	if redisURL == "" {

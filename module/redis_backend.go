@@ -113,6 +113,35 @@ redis.call("XDEL", KEYS[1], ARGV[2])
 return result
 `)
 
+var failMessageScript = redis.NewScript(`
+local pending = redis.call("XPENDING", KEYS[1], ARGV[1], ARGV[2], ARGV[2], 1)
+if #pending == 0 then
+	return 0
+end
+
+local messages = redis.call("XRANGE", KEYS[1], ARGV[2], ARGV[2])
+if #messages == 0 then
+	return redis.error_reply("pending redis stream message is missing")
+end
+
+local values = messages[1][2]
+local payload = nil
+for i = 1, #values, 2 do
+	if values[i] == "payload" then
+		payload = values[i + 1]
+		break
+	end
+end
+if payload == nil then
+	return redis.error_reply("redis stream message has no payload")
+end
+
+redis.call("XADD", KEYS[2], "*", "original_id", ARGV[2], "payload", payload, "reason", ARGV[3], "failed_at", ARGV[4])
+redis.call("XACK", KEYS[1], ARGV[1], ARGV[2])
+redis.call("XDEL", KEYS[1], ARGV[2])
+return 1
+`)
+
 func newRedisBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int, logger *slog.Logger) (*redisBackend, error) {
 	options, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
@@ -308,19 +337,30 @@ func (b *redisBackend) Release(ctx context.Context, queue, id string, delay time
 }
 
 func (b *redisBackend) Fail(ctx context.Context, queue, id, reason string) (int, error) {
-	msg, err := b.getMessage(ctx, queue, id)
+	if !b.isConfiguredQueue(queue) {
+		return dispatchResultQueueUnknown, fmt.Errorf("queue %q is not configured", queue)
+	}
+
+	result, err := failMessageScript.Run(
+		ctx,
+		b.client,
+		[]string{b.streamKey(queue), b.failedKey(queue)},
+		b.group,
+		id,
+		reason,
+		time.Now().UTC().Format(time.RFC3339Nano),
+	).Int64()
 	if err != nil {
 		b.stats.backendErrors.Add(1)
 		return dispatchResultBackendFailure, err
 	}
-	payload, _ := payloadAndAttempts(msg)
-	if err := b.addFailed(ctx, queue, id, payload, reason); err != nil {
+	if result == 0 {
 		b.stats.backendErrors.Add(1)
-		return dispatchResultBackendFailure, err
+		return dispatchResultBackendFailure, fmt.Errorf("delivery %q is not pending", id)
 	}
-	if err := b.ackAndDelete(ctx, queue, id); err != nil {
+	if result != 1 {
 		b.stats.backendErrors.Add(1)
-		return dispatchResultBackendFailure, err
+		return dispatchResultBackendFailure, fmt.Errorf("unexpected redis fail result %d", result)
 	}
 	b.stats.failed.Add(1)
 	return dispatchResultAccepted, nil
@@ -426,42 +466,6 @@ func (b *redisBackend) claimStale(ctx context.Context, queue, consumer string) (
 		return redis.XMessage{}, false, nil
 	}
 	return messages[0], true, nil
-}
-
-func (b *redisBackend) getMessage(ctx context.Context, queue, id string) (redis.XMessage, error) {
-	if !b.isConfiguredQueue(queue) {
-		return redis.XMessage{}, fmt.Errorf("queue %q is not configured", queue)
-	}
-	messages, err := b.client.XRange(ctx, b.streamKey(queue), id, id).Result()
-	if err != nil {
-		return redis.XMessage{}, err
-	}
-	if len(messages) == 0 {
-		return redis.XMessage{}, fmt.Errorf("delivery %q was not found", id)
-	}
-	return messages[0], nil
-}
-
-func (b *redisBackend) addFailed(ctx context.Context, queue, originalID, payload, reason string) error {
-	_, err := b.client.XAdd(ctx, &redis.XAddArgs{
-		Stream: b.failedKey(queue),
-		Values: map[string]any{
-			"original_id": originalID,
-			"payload":     payload,
-			"reason":      reason,
-			"failed_at":   time.Now().UTC().Format(time.RFC3339Nano),
-		},
-	}).Result()
-	return err
-}
-
-func (b *redisBackend) ackAndDelete(ctx context.Context, queue, id string) error {
-	stream := b.streamKey(queue)
-	if err := b.client.XAck(ctx, stream, b.group, id).Err(); err != nil {
-		return err
-	}
-	_ = b.client.XDel(ctx, stream, id).Err()
-	return nil
 }
 
 func (b *redisBackend) deliveryFromMessage(queue string, msg redis.XMessage) (*delivery, error) {
