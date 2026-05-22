@@ -81,12 +81,15 @@ end
 
 local values = messages[1][2]
 local payload = nil
-local attempts = 1
+local attempts = tonumber(pending[1][4]) or 1
 for i = 1, #values, 2 do
 	if values[i] == "payload" then
 		payload = values[i + 1]
 	elseif values[i] == "attempts" then
-		attempts = tonumber(values[i + 1]) or 1
+		local stored_attempts = tonumber(values[i + 1]) or 1
+		if stored_attempts > attempts then
+			attempts = stored_attempts
+		end
 	end
 end
 if payload == nil then
@@ -465,7 +468,44 @@ func (b *redisBackend) claimStale(ctx context.Context, queue, consumer string) (
 	if len(messages) == 0 {
 		return redis.XMessage{}, false, nil
 	}
-	return messages[0], true, nil
+
+	msg := messages[0]
+	attempts, err := b.pendingAttempts(ctx, queue, msg.ID)
+	if err != nil {
+		return redis.XMessage{}, false, err
+	}
+	if _, messageAttempts := payloadAndAttempts(msg); messageAttempts > attempts {
+		attempts = messageAttempts
+	}
+	if attempts > b.maxAttempts {
+		if _, err := b.Fail(ctx, queue, msg.ID, "max attempts exceeded"); err != nil {
+			return redis.XMessage{}, false, err
+		}
+		return redis.XMessage{}, false, nil
+	}
+
+	msg.Values["attempts"] = attempts
+	return msg, true, nil
+}
+
+func (b *redisBackend) pendingAttempts(ctx context.Context, queue, id string) (int, error) {
+	pending, err := b.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+		Stream: b.streamKey(queue),
+		Group:  b.group,
+		Start:  id,
+		End:    id,
+		Count:  1,
+	}).Result()
+	if err != nil {
+		return 0, err
+	}
+	if len(pending) == 0 {
+		return 0, fmt.Errorf("delivery %q is not pending", id)
+	}
+	if pending[0].RetryCount <= 0 {
+		return 1, nil
+	}
+	return int(pending[0].RetryCount), nil
 }
 
 func (b *redisBackend) deliveryFromMessage(queue string, msg redis.XMessage) (*delivery, error) {
