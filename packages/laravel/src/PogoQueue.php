@@ -19,28 +19,22 @@ class PogoQueue extends Queue implements QueueContract
 
     public function size($queue = null)
     {
-        $stats = $this->queueStats($this->getQueue($queue));
-        $queueStats = $stats['queues'][0] ?? null;
-        if (!is_array($queueStats)) {
-            return 0;
-        }
-
-        return (int) (($queueStats['pending'] ?? 0) + ($queueStats['delayed'] ?? 0));
+        return $this->queueMetric($queue, 'pending') + $this->queueMetric($queue, 'delayed');
     }
 
     public function pendingSize($queue = null)
     {
-        return $this->size($queue);
+        return $this->queueMetric($queue, 'pending');
     }
 
     public function delayedSize($queue = null)
     {
-        return 0;
+        return $this->queueMetric($queue, 'delayed');
     }
 
     public function reservedSize($queue = null)
     {
-        return 0;
+        return $this->queueMetric($queue, 'reserved');
     }
 
     public function creationTimeOfOldestPendingJob($queue = null)
@@ -85,5 +79,16 @@ class PogoQueue extends Queue implements QueueContract
     private function queueStats(?string $queue = null): array
     {
         return $this->adapter->status($queue);
+    }
+
+    private function queueMetric(?string $queue, string $metric): int
+    {
+        $stats = $this->queueStats($this->getQueue($queue));
+        $queueStats = $stats['queues'][0] ?? null;
+        if (!is_array($queueStats)) {
+            return 0;
+        }
+
+        return (int) ($queueStats[$metric] ?? 0);
     }
 }

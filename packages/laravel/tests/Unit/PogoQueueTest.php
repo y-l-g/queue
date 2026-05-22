@@ -49,6 +49,7 @@ class FakePogoAdapter implements PogoAdapter
                 'queue' => $queue ?? 'default',
                 'pending' => 5,
                 'delayed' => 2,
+                'reserved' => 3,
             ]],
         ];
     }
@@ -85,15 +86,15 @@ class PogoQueueTest extends TestCase
         $queue = new PogoQueue(new FakePogoAdapter());
 
         $this->assertSame(7, $queue->size());
-        $this->assertSame(7, $queue->pendingSize());
+        $this->assertSame(5, $queue->pendingSize());
     }
 
-    public function test_metrics_methods_default_to_zero_where_not_supported(): void
+    public function test_metrics_methods_use_backend_status(): void
     {
         $queue = new PogoQueue(new FakePogoAdapter());
 
-        $this->assertSame(0, $queue->delayedSize());
-        $this->assertSame(0, $queue->reservedSize());
+        $this->assertSame(2, $queue->delayedSize());
+        $this->assertSame(3, $queue->reservedSize());
         $this->assertNull($queue->creationTimeOfOldestPendingJob());
     }
 
