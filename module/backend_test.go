@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -361,5 +362,57 @@ func TestRedisPromoteDelayedIsAtomicWhenConfigured(t *testing.T) {
 	}
 	if delayedLen != 0 {
 		t.Fatalf("expected delayed set to be empty, got %d", delayedLen)
+	}
+}
+
+func TestRedisReserveReportsPromoteDelayedErrorsWhenConfigured(t *testing.T) {
+	redisURL := os.Getenv("POGO_REDIS_URL")
+	if redisURL == "" {
+		t.Skip("POGO_REDIS_URL is not set")
+	}
+
+	ctx := context.Background()
+	backend, err := newRedisBackend(
+		backendConfig{
+			RedisURL:  redisURL,
+			KeyPrefix: "pogo-test-promote-error",
+			Group:     "test",
+			Consumer:  "test-consumer",
+		},
+		[]string{"default"},
+		defaultMaxMessageBytes,
+		100*time.Millisecond,
+		3,
+		slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	)
+	if err != nil {
+		t.Fatalf("redis backend init failed: %v", err)
+	}
+
+	keys := []string{backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")}
+	if err := backend.client.Del(ctx, keys...).Err(); err != nil {
+		t.Fatalf("redis cleanup failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = backend.client.Del(ctx, keys...).Err()
+		_ = backend.Close()
+	})
+
+	if err := backend.Start(ctx); err != nil {
+		t.Fatalf("redis backend start failed: %v", err)
+	}
+	if err := backend.client.Set(ctx, backend.delayedKey("default"), "wrong-type", 0).Err(); err != nil {
+		t.Fatalf("seed invalid delayed key failed: %v", err)
+	}
+
+	_, err = backend.Reserve(ctx, []string{"default"}, "consumer", 0)
+	if err == nil {
+		t.Fatal("expected reserve to report delayed promotion error")
+	}
+	if errors.Is(err, errQueueEmpty) {
+		t.Fatalf("expected backend error, got queue empty: %v", err)
+	}
+	if got := backend.stats.backendErrors.Load(); got != 1 {
+		t.Fatalf("expected one backend error, got %d", got)
 	}
 }

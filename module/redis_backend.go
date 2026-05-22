@@ -139,7 +139,10 @@ func (b *redisBackend) Reserve(ctx context.Context, queues []string, consumer st
 	}
 
 	for _, queue := range queues {
-		_ = b.promoteDelayed(ctx, queue, 100)
+		if err := b.promoteDelayed(ctx, queue, 100); err != nil {
+			b.stats.backendErrors.Add(1)
+			return nil, err
+		}
 		if msg, ok, err := b.claimStale(ctx, queue, consumer); err != nil {
 			b.stats.backendErrors.Add(1)
 			return nil, err
