@@ -382,18 +382,26 @@ func (b *redisBackend) Stats(ctx context.Context, queue string) (queueStats, err
 	stream := b.streamKey(queue)
 	pending, err := b.client.XLen(ctx, stream).Result()
 	if err != nil {
+		b.stats.backendErrors.Add(1)
 		return queueStats{}, err
 	}
 	delayed, err := b.client.ZCard(ctx, b.delayedKey(queue)).Result()
 	if err != nil {
+		b.stats.backendErrors.Add(1)
 		return queueStats{}, err
 	}
 	failed, err := b.client.XLen(ctx, b.failedKey(queue)).Result()
 	if err != nil {
+		b.stats.backendErrors.Add(1)
 		return queueStats{}, err
 	}
 	reserved := int64(0)
-	if p, err := b.client.XPending(ctx, stream, b.group).Result(); err == nil && p != nil {
+	p, err := b.client.XPending(ctx, stream, b.group).Result()
+	if err != nil {
+		b.stats.backendErrors.Add(1)
+		return queueStats{}, err
+	}
+	if p != nil {
 		reserved = p.Count
 	}
 	if pending >= reserved {
