@@ -57,6 +57,7 @@ func TestQueueEndToEnd(t *testing.T) {
 
 	caddyfileContent := fmt.Sprintf(`
 	{
+		admin off
 		auto_https off
 		frankenphp
 		order php_server before file_server
