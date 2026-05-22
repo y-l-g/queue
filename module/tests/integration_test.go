@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -116,6 +117,27 @@ func TestQueueEndToEnd(t *testing.T) {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	if !waitForServer(baseURL + "/dispatch.php") {
 		t.Fatalf("Server failed to start on port %d within timeout", port)
+	}
+
+	statusResp, err := http.Get(baseURL + "/status.php")
+	if err != nil {
+		t.Fatalf("Failed to get queue status: %v", err)
+	}
+	defer func() {
+		if err := statusResp.Body.Close(); err != nil {
+			t.Logf("Warning: failed to close status response body: %v", err)
+		}
+	}()
+	if statusResp.StatusCode != 200 {
+		body, _ := io.ReadAll(statusResp.Body)
+		t.Fatalf("Expected status code 200 for queue status, got %d. Body: %s", statusResp.StatusCode, string(body))
+	}
+	var status map[string]any
+	if err := json.NewDecoder(statusResp.Body).Decode(&status); err != nil {
+		t.Fatalf("Queue status returned invalid JSON: %v", err)
+	}
+	if _, ok := status["queues"].([]any); !ok {
+		t.Fatalf("Queue status did not include queues: %#v", status)
 	}
 
 	resp, err := http.Post(

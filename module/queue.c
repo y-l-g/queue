@@ -126,12 +126,12 @@ PHP_FUNCTION(pogo_queue_fail) {
 
 PHP_FUNCTION(pogo_queue_status)
 {
-    char *queue = "";
+    char *queue = NULL;
     size_t queue_len = 0;
 
     ZEND_PARSE_PARAMETERS_START(0, 1)
         Z_PARAM_OPTIONAL
-        Z_PARAM_STRING(queue, queue_len)
+        Z_PARAM_STRING_OR_NULL(queue, queue_len)
     ZEND_PARSE_PARAMETERS_END();
 
     char *stats = pogo_queue_status(queue, queue_len);
