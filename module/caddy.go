@@ -133,6 +133,9 @@ func (g *Queue) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.ArgErr()
 				}
 				g.Backend.Type = d.Val()
+				if d.NextArg() {
+					return d.ArgErr()
+				}
 				nesting := d.Nesting()
 				for d.NextBlock(nesting) {
 					if err := g.parseBackendDirective(d); err != nil {
@@ -140,10 +143,11 @@ func (g *Queue) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					}
 				}
 			case "worker":
-				if !d.NextArg() {
-					return d.ArgErr()
+				value, err := parseSingleArgDirective(d)
+				if err != nil {
+					return err
 				}
-				g.Worker = d.Val()
+				g.Worker = value
 			case "queues":
 				if !d.NextArg() {
 					return d.ArgErr()
@@ -213,30 +217,35 @@ func (g *Queue) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 func (g *Queue) parseBackendDirective(d *caddyfile.Dispenser) error {
 	switch d.Val() {
 	case "url":
-		if !d.NextArg() {
-			return d.ArgErr()
+		value, err := parseSingleArgDirective(d)
+		if err != nil {
+			return err
 		}
-		g.Backend.RedisURL = d.Val()
+		g.Backend.RedisURL = value
 	case "key_prefix":
-		if !d.NextArg() {
-			return d.ArgErr()
+		value, err := parseSingleArgDirective(d)
+		if err != nil {
+			return err
 		}
-		g.Backend.KeyPrefix = d.Val()
+		g.Backend.KeyPrefix = value
 	case "group":
-		if !d.NextArg() {
-			return d.ArgErr()
+		value, err := parseSingleArgDirective(d)
+		if err != nil {
+			return err
 		}
-		g.Backend.Group = d.Val()
+		g.Backend.Group = value
 	case "consumer":
-		if !d.NextArg() {
-			return d.ArgErr()
+		value, err := parseSingleArgDirective(d)
+		if err != nil {
+			return err
 		}
-		g.Backend.Consumer = d.Val()
+		g.Backend.Consumer = value
 	case "tls":
-		if !d.NextArg() {
-			return d.ArgErr()
+		raw, err := parseSingleArgDirective(d)
+		if err != nil {
+			return err
 		}
-		value, err := strconv.ParseBool(d.Val())
+		value, err := strconv.ParseBool(raw)
 		if err != nil {
 			return d.Errf("failed to parse tls: %v", err)
 		}
@@ -259,6 +268,17 @@ func (g *Queue) parseBackendDirective(d *caddyfile.Dispenser) error {
 	return nil
 }
 
+func parseSingleArgDirective(d *caddyfile.Dispenser) (string, error) {
+	if !d.NextArg() {
+		return "", d.ArgErr()
+	}
+	value := d.Val()
+	if d.NextArg() {
+		return "", d.ArgErr()
+	}
+	return value, nil
+}
+
 func parsePositiveIntDirective(d *caddyfile.Dispenser, name string) (int, error) {
 	if !d.NextArg() {
 		return 0, d.ArgErr()
@@ -266,6 +286,9 @@ func parsePositiveIntDirective(d *caddyfile.Dispenser, name string) (int, error)
 	value, err := strconv.Atoi(d.Val())
 	if err != nil || value <= 0 {
 		return 0, d.Errf("failed to parse %s as a positive integer", name)
+	}
+	if d.NextArg() {
+		return 0, d.ArgErr()
 	}
 	return value, nil
 }
@@ -277,6 +300,9 @@ func parseDurationDirective(d *caddyfile.Dispenser, name string) (time.Duration,
 	value, err := time.ParseDuration(d.Val())
 	if err != nil || value <= 0 {
 		return 0, d.Errf("failed to parse %s as a positive duration", name)
+	}
+	if d.NextArg() {
+		return 0, d.ArgErr()
 	}
 	return value, nil
 }
