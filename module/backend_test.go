@@ -254,6 +254,54 @@ func TestRedisBackendLifecycleWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestRedisBackendDeliversEmptyPayloadWhenConfigured(t *testing.T) {
+	redisURL := os.Getenv("POGO_REDIS_URL")
+	if redisURL == "" {
+		t.Skip("POGO_REDIS_URL is not set")
+	}
+
+	ctx := context.Background()
+	backend, err := newRedisBackend(
+		backendConfig{
+			RedisURL:  redisURL,
+			KeyPrefix: "pogo-test-empty-payload",
+			Group:     "test",
+			Consumer:  "test-consumer",
+		},
+		[]string{"default"},
+		defaultMaxMessageBytes,
+		100*time.Millisecond,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("redis backend init failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err()
+		_ = backend.Close()
+	})
+	if err := backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err(); err != nil {
+		t.Fatalf("redis cleanup failed: %v", err)
+	}
+	if err := backend.Start(ctx); err != nil {
+		t.Fatalf("redis backend start failed: %v", err)
+	}
+
+	if _, code, err := backend.Enqueue(ctx, "default", "", 0); err != nil || code != dispatchResultAccepted {
+		t.Fatalf("redis enqueue failed: code=%d err=%v", code, err)
+	}
+	delivery, err := backend.Reserve(ctx, []string{"default"}, "consumer", 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("redis reserve failed: %v", err)
+	}
+	if delivery.Payload != "" {
+		t.Fatalf("expected empty payload, got %#v", delivery)
+	}
+	if code, err := backend.Ack(ctx, "default", delivery.ID); err != nil || code != dispatchResultAccepted {
+		t.Fatalf("redis ack failed: code=%d err=%v", code, err)
+	}
+}
+
 func TestRedisReserveWithZeroWaitPollsOnceWhenConfigured(t *testing.T) {
 	redisURL := os.Getenv("POGO_REDIS_URL")
 	if redisURL == "" {

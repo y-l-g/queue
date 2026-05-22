@@ -488,7 +488,7 @@ func (b *redisBackend) claimStale(ctx context.Context, queue, consumer string) (
 	if err != nil {
 		return redis.XMessage{}, false, err
 	}
-	if _, messageAttempts := payloadAndAttempts(msg); messageAttempts > attempts {
+	if _, messageAttempts, _ := payloadAndAttempts(msg); messageAttempts > attempts {
 		attempts = messageAttempts
 	}
 	if attempts > b.maxAttempts {
@@ -523,8 +523,8 @@ func (b *redisBackend) pendingAttempts(ctx context.Context, queue, id string) (i
 }
 
 func (b *redisBackend) deliveryFromMessage(queue string, msg redis.XMessage) (*delivery, error) {
-	payload, attempts := payloadAndAttempts(msg)
-	if payload == "" {
+	payload, attempts, ok := payloadAndAttempts(msg)
+	if !ok {
 		return nil, fmt.Errorf("redis stream message %q has no payload", msg.ID)
 	}
 	return &delivery{
@@ -535,8 +535,8 @@ func (b *redisBackend) deliveryFromMessage(queue string, msg redis.XMessage) (*d
 	}, nil
 }
 
-func payloadAndAttempts(msg redis.XMessage) (string, int) {
-	payload, _ := msg.Values["payload"].(string)
+func payloadAndAttempts(msg redis.XMessage) (string, int, bool) {
+	payload, ok := msg.Values["payload"].(string)
 	attempts := 1
 	switch value := msg.Values["attempts"].(type) {
 	case string:
@@ -552,7 +552,7 @@ func payloadAndAttempts(msg redis.XMessage) (string, int) {
 			attempts = int(value)
 		}
 	}
-	return payload, attempts
+	return payload, attempts, ok
 }
 
 func (b *redisBackend) streamKey(queue string) string {
