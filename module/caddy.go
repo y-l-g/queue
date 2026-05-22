@@ -2,6 +2,7 @@ package queue
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
@@ -148,7 +149,11 @@ func (g *Queue) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if !d.NextArg() {
 					return d.ArgErr()
 				}
-				g.Queues = splitQueueNames(d.Val())
+				args := []string{d.Val()}
+				for d.NextArg() {
+					args = append(args, d.Val())
+				}
+				g.Queues = splitQueueNames(strings.Join(args, " "))
 			case "concurrency":
 				value, err := parsePositiveIntDirective(d, "concurrency")
 				if err != nil {
