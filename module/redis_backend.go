@@ -253,12 +253,17 @@ func (b *redisBackend) Reserve(ctx context.Context, queues []string, consumer st
 		streams = append(streams, ">")
 	}
 
+	block := wait
+	if block <= 0 {
+		block = -1
+	}
+
 	result, err := b.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    b.group,
 		Consumer: consumer,
 		Streams:  streams,
 		Count:    1,
-		Block:    wait,
+		Block:    block,
 	}).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {

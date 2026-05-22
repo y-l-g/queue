@@ -259,6 +259,52 @@ func TestRedisBackendLifecycleWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestRedisReserveWithZeroWaitPollsOnceWhenConfigured(t *testing.T) {
+	redisURL := os.Getenv("POGO_REDIS_URL")
+	if redisURL == "" {
+		t.Skip("POGO_REDIS_URL is not set")
+	}
+
+	ctx := context.Background()
+	backend, err := newRedisBackend(
+		backendConfig{
+			RedisURL:  redisURL,
+			KeyPrefix: "pogo-test-reserve-zero-wait",
+			Group:     "test",
+			Consumer:  "test-consumer",
+		},
+		[]string{"default"},
+		defaultMaxMessageBytes,
+		100*time.Millisecond,
+		3,
+		slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	)
+	if err != nil {
+		t.Fatalf("redis backend init failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err()
+		_ = backend.Close()
+	})
+	if err := backend.client.Del(ctx, backend.streamKey("default"), backend.delayedKey("default"), backend.failedKey("default")).Err(); err != nil {
+		t.Fatalf("redis cleanup failed: %v", err)
+	}
+	if err := backend.Start(ctx); err != nil {
+		t.Fatalf("redis backend start failed: %v", err)
+	}
+
+	pollCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+
+	delivery, err := backend.Reserve(pollCtx, []string{"default"}, "consumer", 0)
+	if !errors.Is(err, errQueueEmpty) {
+		t.Fatalf("expected queue empty, got delivery=%#v err=%v", delivery, err)
+	}
+	if err := pollCtx.Err(); err != nil {
+		t.Fatalf("zero-wait reserve blocked until context expired: %v", err)
+	}
+}
+
 func TestRedisAckRejectsUnknownDeliveryWhenConfigured(t *testing.T) {
 	redisURL := os.Getenv("POGO_REDIS_URL")
 	if redisURL == "" {
