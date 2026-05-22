@@ -42,9 +42,7 @@ final class PogoQueueTransport implements TransportInterface
                     'body' => $delivery['payload'],
                 ]);
             } catch (\Throwable) {
-                if ($deliveryId !== '') {
-                    $this->adapter->fail($queue, $deliveryId, 'Message could not be decoded.');
-                }
+                $this->adapter->fail($queue, $deliveryId, 'Message could not be decoded.');
                 return;
             }
 
