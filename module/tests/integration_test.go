@@ -2,7 +2,6 @@ package tests
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -97,11 +97,8 @@ func TestQueueEndToEnd(t *testing.T) {
 		t.Fatalf("Failed to close temp Caddyfile: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, binPath, "run", "--config", tmpCaddyfile.Name())
-
+	cmd := exec.Command(binPath, "run", "--config", tmpCaddyfile.Name())
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -109,19 +106,22 @@ func TestQueueEndToEnd(t *testing.T) {
 		t.Fatalf("Failed to start server: %v", err)
 	}
 
+	waitDone := make(chan error, 1)
+	go func() {
+		waitDone <- cmd.Wait()
+	}()
+
 	defer func() {
-		cancel()
-		if err := cmd.Wait(); err != nil && err.Error() != "signal: killed" {
-			t.Logf("Command wait error: %v", err)
-		}
+		stopProcessGroup(t, cmd, waitDone)
 	}()
 
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	if !waitForServer(baseURL + "/dispatch.php") {
+	client := &http.Client{Timeout: 2 * time.Second}
+	if !waitForServer(client, baseURL+"/dispatch.php") {
 		t.Fatalf("Server failed to start on port %d within timeout", port)
 	}
 
-	statusResp, err := http.Get(baseURL + "/status.php")
+	statusResp, err := client.Get(baseURL + "/status.php")
 	if err != nil {
 		t.Fatalf("Failed to get queue status: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestQueueEndToEnd(t *testing.T) {
 		t.Fatalf("Queue status did not include queues: %#v", status)
 	}
 
-	resp, err := http.Post(
+	resp, err := client.Post(
 		baseURL+"/dispatch.php",
 		"text/plain",
 		bytes.NewBufferString(outputFile),
@@ -190,9 +190,9 @@ Done:
 	}
 }
 
-func waitForServer(url string) bool {
+func waitForServer(client *http.Client, url string) bool {
 	for i := 0; i < 50; i++ {
-		resp, err := http.Get(url)
+		resp, err := client.Get(url)
 		if err == nil {
 			if err := resp.Body.Close(); err != nil {
 				return false
@@ -202,4 +202,53 @@ func waitForServer(url string) bool {
 		time.Sleep(100 * time.Millisecond)
 	}
 	return false
+}
+
+func stopProcessGroup(t *testing.T, cmd *exec.Cmd, waitDone <-chan error) {
+	t.Helper()
+
+	signalProcessGroup(cmd, syscall.SIGTERM)
+	select {
+	case err := <-waitDone:
+		logProcessExit(t, err)
+		return
+	case <-time.After(2 * time.Second):
+	}
+
+	signalProcessGroup(cmd, syscall.SIGKILL)
+	select {
+	case err := <-waitDone:
+		logProcessExit(t, err)
+	case <-time.After(5 * time.Second):
+		t.Log("Timed out waiting for FrankenPHP process to exit")
+	}
+}
+
+func signalProcessGroup(cmd *exec.Cmd, signal syscall.Signal) {
+	if cmd.Process == nil {
+		return
+	}
+	if pgid, err := syscall.Getpgid(cmd.Process.Pid); err == nil {
+		_ = syscall.Kill(-pgid, signal)
+		return
+	}
+	_ = cmd.Process.Signal(signal)
+}
+
+func logProcessExit(t *testing.T, err error) {
+	t.Helper()
+
+	if err == nil {
+		return
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Logf("Command wait error: %v", err)
+		return
+	}
+	status, ok := exitErr.Sys().(syscall.WaitStatus)
+	if ok && status.Signaled() && (status.Signal() == syscall.SIGTERM || status.Signal() == syscall.SIGKILL) {
+		return
+	}
+	t.Logf("Command wait error: %v", err)
 }
