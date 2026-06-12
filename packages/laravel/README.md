@@ -33,7 +33,7 @@ Delayed dispatch is supported through Laravel's normal `later()` /
 
 For production operations, Redis persistence, duplicate-delivery scenarios,
 `visibility_timeout` sizing, failed-job recovery, and alerting guidance, read
-the root [production runbook](../../docs/production-runbook.md).
+the [production runbook](https://github.com/y-l-g/queue/blob/main/docs/production-runbook.md).
 
 ## Worker
 

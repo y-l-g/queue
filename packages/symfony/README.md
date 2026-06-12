@@ -29,7 +29,7 @@ Delayed messages are supported through Symfony's normal `DelayStamp`.
 
 For production operations, Redis persistence, duplicate-delivery scenarios,
 `visibility_timeout` sizing, failed-message recovery, and alerting guidance, read
-the root [production runbook](../../docs/production-runbook.md).
+the [production runbook](https://github.com/y-l-g/queue/blob/main/docs/production-runbook.md).
 
 ## Worker
 
