@@ -234,6 +234,3 @@ status string containing `ok`, `id`, `code`, and `message` fields.
 - `pogo_queue_retry_failed(string $queue, string $failedId): string`
 - `pogo_queue_forget_failed(string $queue, string $failedId): string`
 - `pogo_queue_purge_failed(string $queue): string`
-
-`pogo_queue()` remains as a deprecated v1 compatibility helper for immediate
-dispatch to the `default` queue.

@@ -15,11 +15,6 @@ func init() {
 	frankenphp.RegisterExtension(unsafe.Pointer(&C.queue_module_entry))
 }
 
-//export pogo_dispatch
-func pogo_dispatch(msg *C.char, length C.size_t) C.int {
-	return dispatch(msg, length)
-}
-
 //export pogo_queue_push
 func pogo_queue_push(queue *C.char, queueLength C.size_t, payload *C.char, payloadLength C.size_t, delaySeconds C.longlong) *C.char {
 	queueName, ok := goStringFromC(queue, queueLength)

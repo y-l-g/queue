@@ -34,19 +34,6 @@ static void return_owned_string(zval *return_value, char *value)
     RETVAL_STR(result);
 }
 
-PHP_FUNCTION(pogo_queue) {
-    char *data;
-    size_t data_len;
-
-    ZEND_PARSE_PARAMETERS_START(1, 1)
-        Z_PARAM_STRING(data, data_len)
-    ZEND_PARSE_PARAMETERS_END();
-
-    zend_long ret = pogo_dispatch(data, data_len);
-
-    RETURN_LONG(ret);
-}
-
 PHP_FUNCTION(pogo_queue_push) {
     char *queue;
     size_t queue_len;

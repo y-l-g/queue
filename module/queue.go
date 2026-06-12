@@ -302,26 +302,6 @@ func enqueue(queue, payload string, delaySeconds int64) *C.char {
 	return jsonCString(pushResult{OK: true, ID: id, Code: code})
 }
 
-func dispatch(charPtr *C.char, length C.size_t) C.int {
-	payload, ok := goStringFromC(charPtr, length)
-	if !ok {
-		return dispatchResultPayloadTooLarge
-	}
-
-	globalManagerMu.RLock()
-	m := globalManager
-	globalManagerMu.RUnlock()
-	if m == nil {
-		return dispatchResultWorkerUnavailable
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_, code, _ := m.enqueue(ctx, "default", payload, 0)
-	return C.int(code)
-}
-
 func ack(queue, id string) C.int {
 	return managerAction(queue, id, func(ctx context.Context, m *manager) (int, error) {
 		return m.backend.Ack(ctx, queue, id)
