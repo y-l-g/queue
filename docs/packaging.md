@@ -7,7 +7,7 @@ not publish a separate worker daemon.
 
 | Component | Supported version | Notes |
 | --- | --- | --- |
-| FrankenPHP | 1.12.x | The example build pins `github.com/dunglas/frankenphp@v1.12.3`. |
+| FrankenPHP | 1.12.x | The example build pins `dunglas/frankenphp:1.12.3` and `github.com/dunglas/frankenphp@v1.12.3`. |
 | Caddy | 2.11.x | Pulled through FrankenPHP's Caddy module dependency. |
 | PHP | 8.5 ZTS | The module is built against FrankenPHP's ZTS PHP runtime. |
 | Redis | 6.2+ | Required for Streams consumer groups and `XAUTOCLAIM`. |
@@ -25,7 +25,9 @@ Use [examples/Dockerfile](../examples/Dockerfile) as the blessed image recipe:
 ```bash
 docker build \
   -f examples/Dockerfile \
+  --build-arg FRANKENPHP_IMAGE_VERSION=1.12.3 \
   --build-arg FRANKENPHP_VERSION=v1.12.3 \
+  --build-arg CBROTLI_VERSION=v1.0.1 \
   -t ghcr.io/your-org/frankenphp-pogo-queue:2.0.0 .
 ```
 

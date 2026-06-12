@@ -21,33 +21,20 @@ FrankenPHP-native transport layer for applications that already operate Redis.
 
 ## Build
 
-Build a FrankenPHP binary that includes this module:
+Build a FrankenPHP binary that includes this module with the reusable Docker
+recipe:
 
-```dockerfile
-FROM dunglas/frankenphp:builder AS builder
-
-COPY --from=caddy:builder /usr/bin/xcaddy /usr/bin/xcaddy
-COPY . /src/queue
-
-RUN CGO_ENABLED=1 \
-    XCADDY_SETCAP=1 \
-    XCADDY_GO_BUILD_FLAGS="-ldflags='-w -s' -tags=nobadger,nomysql,nopgx,nowatcher" \
-    CGO_CFLAGS="-D_GNU_SOURCE $(php-config --includes)" \
-    CGO_CPPFLAGS="$(php-config --includes)" \
-    CGO_LDFLAGS="$(php-config --ldflags) $(php-config --libs)" \
-    xcaddy build \
-        --output /usr/local/bin/frankenphp \
-        --with github.com/dunglas/frankenphp@v1.12.3 \
-        --with github.com/dunglas/frankenphp/caddy@v1.12.3 \
-        --with github.com/dunglas/caddy-cbrotli@v1.0.1 \
-        --with github.com/y-l-g/queue/module=./src/queue/module
-
-FROM dunglas/frankenphp AS runner
-COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
+```bash
+docker build \
+  -f examples/Dockerfile \
+  --build-arg FRANKENPHP_IMAGE_VERSION=1.12.3 \
+  --build-arg FRANKENPHP_VERSION=v1.12.3 \
+  --build-arg CBROTLI_VERSION=v1.0.1 \
+  -t frankenphp-pogo-queue:2.0.0 .
 ```
 
-For a reusable image recipe, compatibility matrix, and release checksum process,
-see [the packaging guide](docs/packaging.md).
+For the compatibility matrix and release checksum process, see
+[the packaging guide](docs/packaging.md).
 
 ## Caddy Configuration
 

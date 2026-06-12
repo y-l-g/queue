@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
 
 ARG FRANKENPHP_VERSION=v1.12.3
+ARG FRANKENPHP_IMAGE_VERSION=1.12.3
 ARG CBROTLI_VERSION=v1.0.1
 
-FROM dunglas/frankenphp:builder AS builder
+FROM dunglas/frankenphp:${FRANKENPHP_IMAGE_VERSION}-builder AS builder
 
 ARG FRANKENPHP_VERSION
 ARG CBROTLI_VERSION
@@ -24,7 +25,7 @@ RUN CGO_ENABLED=1 \
         --with github.com/dunglas/caddy-cbrotli@${CBROTLI_VERSION} \
         --with github.com/y-l-g/queue/module=./src/queue/module
 
-FROM dunglas/frankenphp AS runtime
+FROM dunglas/frankenphp:${FRANKENPHP_IMAGE_VERSION} AS runtime
 
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 WORKDIR /app
