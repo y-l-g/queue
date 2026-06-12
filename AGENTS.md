@@ -10,6 +10,7 @@ export CGO_ENABLED=1
 export CGO_CFLAGS="-D_GNU_SOURCE -g -O0 $($PHP_CONFIG --includes)"
 export CGO_CPPFLAGS="$($PHP_CONFIG --includes)"
 export CGO_LDFLAGS="-L$PHP_PREFIX/lib -Wl,-rpath,$PHP_PREFIX/lib $($PHP_CONFIG --ldflags) $($PHP_CONFIG --libs)"
+cd module
 go test -v ./... -tags=nobadger,nomysql,nopgx,nowatcher -mod=readonly
 ```
 
