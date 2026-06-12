@@ -211,6 +211,8 @@ production. The key points are:
 - Monitor pending, reserved, delayed, failed, backend error, and payload rejection
   counts via `pogo_queue_status()` or the Caddy Prometheus metrics registered by
   the module.
+- Use the failed-job operations to inspect, retry, forget, or purge failed
+  deliveries without editing Redis keys by hand.
 - During deploys, FrankenPHP stops reserving new work and waits up to
   `shutdown_timeout`; unacknowledged Redis messages remain pending and can be
   reclaimed after `visibility_timeout`.
@@ -225,6 +227,10 @@ status string containing `ok`, `id`, `code`, and `message` fields.
 - `pogo_queue_release(string $queue, string $deliveryId, int $delaySeconds = 0): int`
 - `pogo_queue_fail(string $queue, string $deliveryId, string $reason = ''): int`
 - `pogo_queue_status(?string $queue = null): string`
+- `pogo_queue_failed(string $queue, int $limit = 100): string`
+- `pogo_queue_retry_failed(string $queue, string $failedId): string`
+- `pogo_queue_forget_failed(string $queue, string $failedId): string`
+- `pogo_queue_purge_failed(string $queue): string`
 
 `pogo_queue()` remains as a deprecated v1 compatibility helper for immediate
 dispatch to the `default` queue.

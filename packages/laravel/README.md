@@ -48,3 +48,15 @@ $app['queue.worker']->process('pogo', $job, new WorkerOptions());
 
 `PogoJob::delete()`, `release()`, and `fail()` acknowledge, retry, or dead-letter
 the Redis Streams delivery.
+
+The adapter also exposes failed-job recovery primitives:
+
+```php
+$failed = $queue->getAdapter()->failed('default');
+$failedId = $failed[0]['id'];
+
+// Choose one recovery action:
+$newId = $queue->getAdapter()->retryFailed('default', $failedId);
+$queue->getAdapter()->forgetFailed('default', $failedId);
+$purged = $queue->getAdapter()->purgeFailed('default');
+```

@@ -53,6 +53,23 @@ class FakePogoAdapter implements PogoAdapter
             ]],
         ];
     }
+
+    public function failed(string $queue, int $limit = 100): array
+    {
+        return [];
+    }
+
+    public function retryFailed(string $queue, string $failedId): string
+    {
+        return 'job-2';
+    }
+
+    public function forgetFailed(string $queue, string $failedId): void {}
+
+    public function purgeFailed(string $queue): int
+    {
+        return 0;
+    }
 }
 
 class PogoQueueTest extends TestCase

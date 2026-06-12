@@ -84,3 +84,47 @@ func pogo_queue_status(queue *C.char, queueLength C.size_t) *C.char {
 	}
 	return queueStatsJSON(queueName)
 }
+
+//export pogo_queue_failed
+func pogo_queue_failed(queue *C.char, queueLength C.size_t, limit C.longlong) *C.char {
+	queueName, ok := goStringFromC(queue, queueLength)
+	if !ok {
+		return jsonCString(failedJobsPayload{OK: false, Failed: []failedJob{}, Code: dispatchResultPayloadTooLarge, Message: "queue name is too large"})
+	}
+	return failedJobsJSON(queueName, int64(limit))
+}
+
+//export pogo_queue_retry_failed
+func pogo_queue_retry_failed(queue *C.char, queueLength C.size_t, failed *C.char, failedLength C.size_t) *C.char {
+	queueName, ok := goStringFromC(queue, queueLength)
+	if !ok {
+		return jsonCString(failedOperationResult{OK: false, Code: dispatchResultPayloadTooLarge, Message: "queue name is too large"})
+	}
+	failedID, ok := goStringFromC(failed, failedLength)
+	if !ok {
+		return jsonCString(failedOperationResult{OK: false, Code: dispatchResultPayloadTooLarge, Message: "failed id is too large"})
+	}
+	return retryFailedJSON(queueName, failedID)
+}
+
+//export pogo_queue_forget_failed
+func pogo_queue_forget_failed(queue *C.char, queueLength C.size_t, failed *C.char, failedLength C.size_t) *C.char {
+	queueName, ok := goStringFromC(queue, queueLength)
+	if !ok {
+		return jsonCString(failedOperationResult{OK: false, Code: dispatchResultPayloadTooLarge, Message: "queue name is too large"})
+	}
+	failedID, ok := goStringFromC(failed, failedLength)
+	if !ok {
+		return jsonCString(failedOperationResult{OK: false, Code: dispatchResultPayloadTooLarge, Message: "failed id is too large"})
+	}
+	return forgetFailedJSON(queueName, failedID)
+}
+
+//export pogo_queue_purge_failed
+func pogo_queue_purge_failed(queue *C.char, queueLength C.size_t) *C.char {
+	queueName, ok := goStringFromC(queue, queueLength)
+	if !ok {
+		return jsonCString(failedOperationResult{OK: false, Code: dispatchResultPayloadTooLarge, Message: "queue name is too large"})
+	}
+	return purgeFailedJSON(queueName)
+}

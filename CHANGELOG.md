@@ -14,4 +14,6 @@
   timeout sizing, deploy behavior, status checks, and failed-job recovery.
 - Added Caddy Prometheus metrics for worker readiness, queue message states,
   lifecycle events, backend errors, dropped payloads, and payload limits.
+- Added failed-job operations to list, retry, forget, and purge failed
+  deliveries through the extension and framework adapters.
 - Deprecated the v1 `pogo_queue()` helper in favor of `pogo_queue_push()`.

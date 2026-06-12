@@ -59,3 +59,15 @@ return static function (array $context) {
 
 The transport acknowledges handled messages, fails rejected messages, and records
 delivery metadata in `PogoReceivedStamp`.
+
+The adapter also exposes failed-message recovery primitives:
+
+```php
+$failed = $adapter->failed('default');
+$failedId = $failed[0]['id'];
+
+// Choose one recovery action:
+$newId = $adapter->retryFailed('default', $failedId);
+$adapter->forgetFailed('default', $failedId);
+$purged = $adapter->purgeFailed('default');
+```

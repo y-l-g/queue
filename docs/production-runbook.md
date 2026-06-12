@@ -138,24 +138,36 @@ Failed deliveries are written to `<prefix>:<queue>:failed` with the original
 stream id, payload, failure reason, and failure timestamp. They are not removed
 automatically.
 
-Inspect recent failures:
+Use the module operations first:
+
+```php
+$failed = json_decode(pogo_queue_failed('default', 100), true, flags: JSON_THROW_ON_ERROR);
+$failedId = $failed['failed'][0]['id'];
+
+// Choose one recovery action:
+$retry = json_decode(pogo_queue_retry_failed('default', $failedId), true, flags: JSON_THROW_ON_ERROR);
+$forget = json_decode(pogo_queue_forget_failed('default', $failedId), true, flags: JSON_THROW_ON_ERROR);
+$purge = json_decode(pogo_queue_purge_failed('default'), true, flags: JSON_THROW_ON_ERROR);
+```
+
+The Laravel and Symfony adapters expose the same operations as
+`failed()`, `retryFailed()`, `forgetFailed()`, and `purgeFailed()`.
+
+`retryFailed()` creates a fresh ready delivery from the failed payload and
+removes the failed record only after the enqueue succeeds. `forgetFailed()`
+removes one failed record. `purgeFailed()` removes all failed records for the
+queue and returns the count.
+
+Prefer retrying work through the module or a framework/application command that
+created the job, because that keeps business validation and audit logging in one
+place. For emergency manual inspection, read the failed stream directly:
 
 ```bash
 redis-cli XREVRANGE pogo:default:failed + - COUNT 10
 ```
 
-Prefer replaying work through the framework or application command that created
-the job, because that keeps business validation and audit logging in one place.
-For emergency manual replay, inspect the failed payload first, then re-enqueue
-the payload and remove the failed record only after the replay is accepted:
-
-```bash
-redis-cli XADD pogo:default:stream '*' payload "$PAYLOAD" attempts 1
-redis-cli XDEL pogo:default:failed "$FAILED_ID"
-```
-
-Use manual replay carefully. It bypasses framework-specific failed-job tooling
-and can duplicate side effects if the original handler partially succeeded.
+Use manual Redis edits carefully. They bypass module checks and can duplicate
+side effects if the original handler partially succeeded.
 
 ## Incident Checklist
 

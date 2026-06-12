@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,6 +13,8 @@ type memoryMessage struct {
 	delivery
 	AvailableAt time.Time
 	ReservedAt  time.Time
+	FailedAt    time.Time
+	FailReason  string
 }
 
 type memoryQueue struct {
@@ -213,7 +216,7 @@ func (b *memoryBackend) Release(_ context.Context, queue, id string, delay time.
 	msg.ReservedAt = time.Time{}
 	msg.AvailableAt = time.Now().Add(delay)
 	if msg.Attempts > b.maxAttempts {
-		q.failed[id] = msg
+		b.failLocked(q, msg, "max attempts exceeded")
 		b.stats.failed.Add(1)
 		return dispatchResultAccepted, nil
 	}
@@ -226,7 +229,7 @@ func (b *memoryBackend) Release(_ context.Context, queue, id string, delay time.
 	return dispatchResultAccepted, nil
 }
 
-func (b *memoryBackend) Fail(_ context.Context, queue, id, _ string) (int, error) {
+func (b *memoryBackend) Fail(_ context.Context, queue, id, reason string) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -240,7 +243,7 @@ func (b *memoryBackend) Fail(_ context.Context, queue, id, _ string) (int, error
 		return dispatchResultBackendFailure, fmt.Errorf("delivery %q is not pending", id)
 	}
 	delete(q.pending, id)
-	q.failed[id] = msg
+	b.failLocked(q, msg, reason)
 	b.stats.failed.Add(1)
 	return dispatchResultAccepted, nil
 }
@@ -277,6 +280,96 @@ func (b *memoryBackend) Counters() backendCounterSnapshot {
 	return b.stats.snapshot()
 }
 
+func (b *memoryBackend) ListFailed(_ context.Context, queue string, limit int64) ([]failedJob, int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	q := b.queues[queue]
+	if q == nil {
+		return nil, dispatchResultQueueUnknown, fmt.Errorf("queue %q is not configured", queue)
+	}
+	limit = normalizeFailedJobsLimit(limit)
+
+	failed := make([]failedJob, 0, len(q.failed))
+	for id, msg := range q.failed {
+		failed = append(failed, failedJobFromMemoryMessage(id, queue, msg))
+	}
+	sort.Slice(failed, func(i, j int) bool {
+		if failed[i].FailedAt == failed[j].FailedAt {
+			return failed[i].ID > failed[j].ID
+		}
+		return failed[i].FailedAt > failed[j].FailedAt
+	})
+	if int64(len(failed)) > limit {
+		failed = failed[:limit]
+	}
+	return failed, dispatchResultAccepted, nil
+}
+
+func (b *memoryBackend) RetryFailed(_ context.Context, queue, id string) (string, int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	q := b.queues[queue]
+	if q == nil {
+		return "", dispatchResultQueueUnknown, fmt.Errorf("queue %q is not configured", queue)
+	}
+	msg, ok := q.failed[id]
+	if !ok {
+		b.stats.backendErrors.Add(1)
+		return "", dispatchResultBackendFailure, fmt.Errorf("failed delivery %q is not present", id)
+	}
+
+	delete(q.failed, id)
+	msg.ID = fmt.Sprintf("mem-%d", b.nextID.Add(1))
+	msg.Attempts = 1
+	msg.AvailableAt = time.Now()
+	msg.ReservedAt = time.Time{}
+	msg.FailedAt = time.Time{}
+	msg.FailReason = ""
+	q.ready = append(q.ready, msg)
+	b.stats.enqueued.Add(1)
+
+	return msg.ID, dispatchResultAccepted, nil
+}
+
+func (b *memoryBackend) ForgetFailed(_ context.Context, queue, id string) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	q := b.queues[queue]
+	if q == nil {
+		return dispatchResultQueueUnknown, fmt.Errorf("queue %q is not configured", queue)
+	}
+	msg, ok := q.failed[id]
+	if !ok {
+		b.stats.backendErrors.Add(1)
+		return dispatchResultBackendFailure, fmt.Errorf("failed delivery %q is not present", id)
+	}
+
+	delete(q.failed, id)
+	b.totalBytes -= len(msg.Payload)
+	return dispatchResultAccepted, nil
+}
+
+func (b *memoryBackend) PurgeFailed(_ context.Context, queue string) (int64, int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	q := b.queues[queue]
+	if q == nil {
+		return 0, dispatchResultQueueUnknown, fmt.Errorf("queue %q is not configured", queue)
+	}
+
+	var purged int64
+	for id, msg := range q.failed {
+		delete(q.failed, id)
+		b.totalBytes -= len(msg.Payload)
+		purged++
+	}
+	return purged, dispatchResultAccepted, nil
+}
+
 func (b *memoryBackend) Close() error {
 	return nil
 }
@@ -293,12 +386,34 @@ func (b *memoryBackend) reclaimLocked(q *memoryQueue, now time.Time) {
 		msg.Attempts++
 		msg.ReservedAt = time.Time{}
 		if msg.Attempts > b.maxAttempts {
-			q.failed[id] = msg
+			b.failLocked(q, msg, "max attempts exceeded")
 			b.stats.failed.Add(1)
 		} else {
 			q.ready = append(q.ready, msg)
 			b.stats.released.Add(1)
 		}
+	}
+}
+
+func (b *memoryBackend) failLocked(q *memoryQueue, msg *memoryMessage, reason string) {
+	msg.FailedAt = time.Now().UTC()
+	msg.FailReason = reason
+	q.failed[msg.ID] = msg
+}
+
+func failedJobFromMemoryMessage(id, queue string, msg *memoryMessage) failedJob {
+	failedAt := ""
+	if !msg.FailedAt.IsZero() {
+		failedAt = msg.FailedAt.UTC().Format(time.RFC3339Nano)
+	}
+
+	return failedJob{
+		ID:         id,
+		Queue:      queue,
+		OriginalID: id,
+		Payload:    msg.Payload,
+		Reason:     msg.FailReason,
+		FailedAt:   failedAt,
 	}
 }
 

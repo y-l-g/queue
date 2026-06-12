@@ -14,5 +14,16 @@ interface PogoAdapter
 
     public function fail(string $queue, string $deliveryId, string $reason = ''): void;
 
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function failed(string $queue, int $limit = 100): array;
+
+    public function retryFailed(string $queue, string $failedId): string;
+
+    public function forgetFailed(string $queue, string $failedId): void;
+
+    public function purgeFailed(string $queue): int;
+
     public function handle(callable $callback): bool;
 }

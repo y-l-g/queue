@@ -25,3 +25,19 @@ function pogo_queue_fail(string $queue, string $deliveryId, string $reason = '')
 function pogo_queue_status(?string $queue = null): string
 {
 }
+
+function pogo_queue_failed(string $queue, int $limit = 100): string
+{
+}
+
+function pogo_queue_retry_failed(string $queue, string $failedId): string
+{
+}
+
+function pogo_queue_forget_failed(string $queue, string $failedId): string
+{
+}
+
+function pogo_queue_purge_failed(string $queue): string
+{
+}

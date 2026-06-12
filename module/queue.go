@@ -58,6 +58,22 @@ type pushResult struct {
 	Message string `json:"message,omitempty"`
 }
 
+type failedJobsPayload struct {
+	OK      bool        `json:"ok"`
+	Queue   string      `json:"queue,omitempty"`
+	Failed  []failedJob `json:"failed"`
+	Code    int         `json:"code,omitempty"`
+	Message string      `json:"message,omitempty"`
+}
+
+type failedOperationResult struct {
+	OK      bool   `json:"ok"`
+	ID      string `json:"id,omitempty"`
+	Count   int64  `json:"count,omitempty"`
+	Code    int    `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
 type statusPayload struct {
 	Ready  bool         `json:"ready"`
 	Queues []queueStats `json:"queues"`
@@ -340,10 +356,154 @@ func managerAction(queue, id string, action func(context.Context, *manager) (int
 	defer cancel()
 
 	code, err := action(ctx, m)
-	if err != nil {
+	if err != nil && m.logger != nil {
 		m.logger.Error("pogo_queue: lifecycle action failed", slog.String("queue", queue), slog.String("id", id), slog.Any("error", err))
 	}
 	return C.int(code)
+}
+
+func failedJobsJSON(queue string, limit int64) *C.char {
+	if queue == "" {
+		return jsonCString(failedJobsPayload{
+			OK:      false,
+			Failed:  []failedJob{},
+			Code:    dispatchResultBackendFailure,
+			Message: "queue is required",
+		})
+	}
+
+	globalManagerMu.RLock()
+	m := globalManager
+	globalManagerMu.RUnlock()
+	if m == nil {
+		return jsonCString(failedJobsPayload{
+			OK:      false,
+			Queue:   queue,
+			Failed:  []failedJob{},
+			Code:    dispatchResultWorkerUnavailable,
+			Message: "pogo_queue worker is unavailable",
+		})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	failed, code, err := m.backend.ListFailed(ctx, queue, normalizeFailedJobsLimit(limit))
+	if err != nil {
+		if m.logger != nil {
+			m.logger.Error("pogo_queue: failed job list failed", slog.String("queue", queue), slog.Any("error", err))
+		}
+		return jsonCString(failedJobsPayload{
+			OK:      false,
+			Queue:   queue,
+			Failed:  []failedJob{},
+			Code:    code,
+			Message: err.Error(),
+		})
+	}
+
+	return jsonCString(failedJobsPayload{
+		OK:     true,
+		Queue:  queue,
+		Failed: failed,
+		Code:   code,
+	})
+}
+
+func retryFailedJSON(queue, id string) *C.char {
+	return failedOperationJSON(queue, id, func(ctx context.Context, m *manager) (failedOperationResult, error) {
+		newID, code, err := m.backend.RetryFailed(ctx, queue, id)
+		return failedOperationResult{OK: err == nil, ID: newID, Code: code}, err
+	})
+}
+
+func forgetFailedJSON(queue, id string) *C.char {
+	return failedOperationJSON(queue, id, func(ctx context.Context, m *manager) (failedOperationResult, error) {
+		code, err := m.backend.ForgetFailed(ctx, queue, id)
+		count := int64(0)
+		if err == nil {
+			count = 1
+		}
+		return failedOperationResult{OK: err == nil, Count: count, Code: code}, err
+	})
+}
+
+func purgeFailedJSON(queue string) *C.char {
+	if queue == "" {
+		return jsonCString(failedOperationResult{
+			OK:      false,
+			Code:    dispatchResultBackendFailure,
+			Message: "queue is required",
+		})
+	}
+
+	globalManagerMu.RLock()
+	m := globalManager
+	globalManagerMu.RUnlock()
+	if m == nil {
+		return jsonCString(failedOperationResult{
+			OK:      false,
+			Code:    dispatchResultWorkerUnavailable,
+			Message: "pogo_queue worker is unavailable",
+		})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	count, code, err := m.backend.PurgeFailed(ctx, queue)
+	if err != nil {
+		if m.logger != nil {
+			m.logger.Error("pogo_queue: failed job purge failed", slog.String("queue", queue), slog.Any("error", err))
+		}
+		return jsonCString(failedOperationResult{OK: false, Code: code, Message: err.Error()})
+	}
+
+	return jsonCString(failedOperationResult{OK: true, Count: count, Code: code})
+}
+
+func failedOperationJSON(queue, id string, action func(context.Context, *manager) (failedOperationResult, error)) *C.char {
+	if queue == "" || id == "" {
+		return jsonCString(failedOperationResult{
+			OK:      false,
+			Code:    dispatchResultBackendFailure,
+			Message: "queue and failed id are required",
+		})
+	}
+
+	globalManagerMu.RLock()
+	m := globalManager
+	globalManagerMu.RUnlock()
+	if m == nil {
+		return jsonCString(failedOperationResult{
+			OK:      false,
+			Code:    dispatchResultWorkerUnavailable,
+			Message: "pogo_queue worker is unavailable",
+		})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result, err := action(ctx, m)
+	if err != nil {
+		result.OK = false
+		result.Message = err.Error()
+		if m.logger != nil {
+			m.logger.Error("pogo_queue: failed job operation failed", slog.String("queue", queue), slog.String("id", id), slog.Any("error", err))
+		}
+	}
+	return jsonCString(result)
+}
+
+func normalizeFailedJobsLimit(limit int64) int64 {
+	if limit <= 0 {
+		return defaultFailedJobsLimit
+	}
+	if limit > maxFailedJobsLimit {
+		return maxFailedJobsLimit
+	}
+	return limit
 }
 
 func queueStatsJSON(queue string) *C.char {

@@ -26,10 +26,7 @@ class FrankenPhpAdapter implements PogoAdapter
             throw new RuntimeException("FrankenPHP 'pogo_queue_push' extension is not enabled.");
         }
 
-        $result = json_decode(\pogo_queue_push($queue, $payload, $delaySeconds), true);
-        if (!is_array($result)) {
-            throw new QueueSendException('FrankenPHP queue dispatch returned an invalid response.');
-        }
+        $result = $this->decodeResponse(\pogo_queue_push($queue, $payload, $delaySeconds), 'FrankenPHP queue dispatch returned an invalid response.');
 
         if (($result['ok'] ?? false) === true && is_string($result['id'] ?? null)) {
             return $result['id'];
@@ -66,6 +63,54 @@ class FrankenPhpAdapter implements PogoAdapter
         return is_array($decoded) ? $decoded : [];
     }
 
+    public function failed(string $queue, int $limit = 100): array
+    {
+        $this->assertLifecycleFunction('pogo_queue_failed');
+
+        $result = $this->decodeResponse(\pogo_queue_failed($queue, $limit), 'FrankenPHP queue failed listing returned an invalid response.');
+        if (($result['ok'] ?? false) === true && is_array($result['failed'] ?? null)) {
+            return array_values(array_filter($result['failed'], 'is_array'));
+        }
+
+        $this->throwOnFailure((int) ($result['code'] ?? self::DISPATCH_RESULT_BACKEND_FAILURE), (string) ($result['message'] ?? 'Failed job listing failed.'));
+    }
+
+    public function retryFailed(string $queue, string $failedId): string
+    {
+        $this->assertLifecycleFunction('pogo_queue_retry_failed');
+
+        $result = $this->decodeResponse(\pogo_queue_retry_failed($queue, $failedId), 'FrankenPHP queue failed retry returned an invalid response.');
+        if (($result['ok'] ?? false) === true && is_string($result['id'] ?? null)) {
+            return $result['id'];
+        }
+
+        $this->throwOnFailure((int) ($result['code'] ?? self::DISPATCH_RESULT_BACKEND_FAILURE), (string) ($result['message'] ?? 'Failed job retry failed.'));
+    }
+
+    public function forgetFailed(string $queue, string $failedId): void
+    {
+        $this->assertLifecycleFunction('pogo_queue_forget_failed');
+
+        $result = $this->decodeResponse(\pogo_queue_forget_failed($queue, $failedId), 'FrankenPHP queue failed forget returned an invalid response.');
+        if (($result['ok'] ?? false) === true) {
+            return;
+        }
+
+        $this->throwOnFailure((int) ($result['code'] ?? self::DISPATCH_RESULT_BACKEND_FAILURE), (string) ($result['message'] ?? 'Failed job forget failed.'));
+    }
+
+    public function purgeFailed(string $queue): int
+    {
+        $this->assertLifecycleFunction('pogo_queue_purge_failed');
+
+        $result = $this->decodeResponse(\pogo_queue_purge_failed($queue), 'FrankenPHP queue failed purge returned an invalid response.');
+        if (($result['ok'] ?? false) === true) {
+            return (int) ($result['count'] ?? 0);
+        }
+
+        $this->throwOnFailure((int) ($result['code'] ?? self::DISPATCH_RESULT_BACKEND_FAILURE), (string) ($result['message'] ?? 'Failed job purge failed.'));
+    }
+
     private function assertLifecycleFunction(string $function): void
     {
         if (!function_exists($function)) {
@@ -80,6 +125,19 @@ class FrankenPhpAdapter implements PogoAdapter
         }
 
         $this->throwOnFailure($status, sprintf('FrankenPHP queue lifecycle operation failed with status code %d.', $status));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function decodeResponse(string $response, string $message): array
+    {
+        $result = json_decode($response, true);
+        if (!is_array($result)) {
+            throw new QueueSendException($message);
+        }
+
+        return $result;
     }
 
     private function throwOnFailure(int $status, string $message): never

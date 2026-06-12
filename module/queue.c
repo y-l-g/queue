@@ -137,3 +137,65 @@ PHP_FUNCTION(pogo_queue_status)
     char *stats = pogo_queue_status(queue, queue_len);
     return_owned_string(return_value, stats);
 }
+
+PHP_FUNCTION(pogo_queue_failed) {
+    char *queue;
+    size_t queue_len;
+    zend_long limit = 100;
+
+    ZEND_PARSE_PARAMETERS_START(1, 2)
+        Z_PARAM_STRING(queue, queue_len)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_LONG(limit)
+    ZEND_PARSE_PARAMETERS_END();
+
+    if (limit < 1 || limit > 1000) {
+        zend_throw_exception(zend_ce_value_error, "Limit must be between 1 and 1000.", 0);
+        RETURN_THROWS();
+    }
+
+    char *result = pogo_queue_failed(queue, queue_len, limit);
+    return_owned_string(return_value, result);
+}
+
+PHP_FUNCTION(pogo_queue_retry_failed) {
+    char *queue;
+    size_t queue_len;
+    char *failed;
+    size_t failed_len;
+
+    ZEND_PARSE_PARAMETERS_START(2, 2)
+        Z_PARAM_STRING(queue, queue_len)
+        Z_PARAM_STRING(failed, failed_len)
+    ZEND_PARSE_PARAMETERS_END();
+
+    char *result = pogo_queue_retry_failed(queue, queue_len, failed, failed_len);
+    return_owned_string(return_value, result);
+}
+
+PHP_FUNCTION(pogo_queue_forget_failed) {
+    char *queue;
+    size_t queue_len;
+    char *failed;
+    size_t failed_len;
+
+    ZEND_PARSE_PARAMETERS_START(2, 2)
+        Z_PARAM_STRING(queue, queue_len)
+        Z_PARAM_STRING(failed, failed_len)
+    ZEND_PARSE_PARAMETERS_END();
+
+    char *result = pogo_queue_forget_failed(queue, queue_len, failed, failed_len);
+    return_owned_string(return_value, result);
+}
+
+PHP_FUNCTION(pogo_queue_purge_failed) {
+    char *queue;
+    size_t queue_len;
+
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_STRING(queue, queue_len)
+    ZEND_PARSE_PARAMETERS_END();
+
+    char *result = pogo_queue_purge_failed(queue, queue_len);
+    return_owned_string(return_value, result);
+}

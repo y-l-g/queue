@@ -23,6 +23,8 @@ const (
 const (
 	defaultMaxMessageBytes = 1 << 20 // 1MB
 	defaultMaxAttempts     = 3
+	defaultFailedJobsLimit = 100
+	maxFailedJobsLimit     = 1000
 )
 
 var errQueueEmpty = errors.New("queue is empty")
@@ -53,6 +55,15 @@ type queueStats struct {
 	MaxPayloadBytes int    `json:"max_payload_bytes"`
 }
 
+type failedJob struct {
+	ID         string `json:"id"`
+	Queue      string `json:"queue"`
+	OriginalID string `json:"original_id,omitempty"`
+	Payload    string `json:"payload"`
+	Reason     string `json:"reason,omitempty"`
+	FailedAt   string `json:"failed_at,omitempty"`
+}
+
 type backendCounterSnapshot struct {
 	Enqueued        uint64
 	Reserved        uint64
@@ -74,6 +85,10 @@ type backend interface {
 	Fail(context.Context, string, string, string) (int, error)
 	Stats(context.Context, string) (queueStats, error)
 	Counters() backendCounterSnapshot
+	ListFailed(context.Context, string, int64) ([]failedJob, int, error)
+	RetryFailed(context.Context, string, string) (string, int, error)
+	ForgetFailed(context.Context, string, string) (int, error)
+	PurgeFailed(context.Context, string) (int64, int, error)
 	Close() error
 }
 

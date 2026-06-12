@@ -143,6 +143,37 @@ redis.call("XDEL", KEYS[1], ARGV[2])
 return 1
 `)
 
+var retryFailedScript = redis.NewScript(`
+local failed = redis.call("XRANGE", KEYS[2], ARGV[1], ARGV[1])
+if #failed == 0 then
+	return redis.error_reply("failed redis stream message is missing")
+end
+
+local values = failed[1][2]
+local payload = nil
+for i = 1, #values, 2 do
+	if values[i] == "payload" then
+		payload = values[i + 1]
+		break
+	end
+end
+if payload == nil then
+	return redis.error_reply("failed redis stream message has no payload")
+end
+
+local new_id = redis.call("XADD", KEYS[1], "*", "payload", payload, "attempts", "1")
+redis.call("XDEL", KEYS[2], ARGV[1])
+return new_id
+`)
+
+var purgeFailedScript = redis.NewScript(`
+local count = redis.call("XLEN", KEYS[1])
+if count > 0 then
+	redis.call("DEL", KEYS[1])
+end
+return count
+`)
+
 func newRedisBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int) (*redisBackend, error) {
 	options, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
@@ -434,6 +465,75 @@ func (b *redisBackend) Counters() backendCounterSnapshot {
 	return b.stats.snapshot()
 }
 
+func (b *redisBackend) ListFailed(ctx context.Context, queue string, limit int64) ([]failedJob, int, error) {
+	if !b.isConfiguredQueue(queue) {
+		return nil, dispatchResultQueueUnknown, fmt.Errorf("queue %q is not configured", queue)
+	}
+	limit = normalizeFailedJobsLimit(limit)
+	messages, err := b.client.XRevRangeN(ctx, b.failedKey(queue), "+", "-", limit).Result()
+	if err != nil {
+		b.stats.backendErrors.Add(1)
+		return nil, dispatchResultBackendFailure, err
+	}
+
+	failed := make([]failedJob, 0, len(messages))
+	for _, msg := range messages {
+		job, err := failedJobFromRedisMessage(queue, msg)
+		if err != nil {
+			b.stats.backendErrors.Add(1)
+			return nil, dispatchResultBackendFailure, err
+		}
+		failed = append(failed, job)
+	}
+	return failed, dispatchResultAccepted, nil
+}
+
+func (b *redisBackend) RetryFailed(ctx context.Context, queue, id string) (string, int, error) {
+	if !b.isConfiguredQueue(queue) {
+		return "", dispatchResultQueueUnknown, fmt.Errorf("queue %q is not configured", queue)
+	}
+	if err := b.ensureGroup(ctx, queue); err != nil {
+		b.stats.backendErrors.Add(1)
+		return "", dispatchResultBackendFailure, err
+	}
+
+	newID, err := retryFailedScript.Run(ctx, b.client, []string{b.streamKey(queue), b.failedKey(queue)}, id).Text()
+	if err != nil {
+		b.stats.backendErrors.Add(1)
+		return "", dispatchResultBackendFailure, err
+	}
+	b.stats.enqueued.Add(1)
+	return newID, dispatchResultAccepted, nil
+}
+
+func (b *redisBackend) ForgetFailed(ctx context.Context, queue, id string) (int, error) {
+	if !b.isConfiguredQueue(queue) {
+		return dispatchResultQueueUnknown, fmt.Errorf("queue %q is not configured", queue)
+	}
+	deleted, err := b.client.XDel(ctx, b.failedKey(queue), id).Result()
+	if err != nil {
+		b.stats.backendErrors.Add(1)
+		return dispatchResultBackendFailure, err
+	}
+	if deleted == 0 {
+		b.stats.backendErrors.Add(1)
+		return dispatchResultBackendFailure, fmt.Errorf("failed delivery %q is not present", id)
+	}
+	return dispatchResultAccepted, nil
+}
+
+func (b *redisBackend) PurgeFailed(ctx context.Context, queue string) (int64, int, error) {
+	if !b.isConfiguredQueue(queue) {
+		return 0, dispatchResultQueueUnknown, fmt.Errorf("queue %q is not configured", queue)
+	}
+	deleted, err := purgeFailedScript.Run(ctx, b.client, []string{b.failedKey(queue)}).Int64()
+	if err != nil {
+		b.stats.backendErrors.Add(1)
+		return 0, dispatchResultBackendFailure, err
+	}
+	return deleted, dispatchResultAccepted, nil
+}
+
 func (b *redisBackend) Close() error {
 	return b.client.Close()
 }
@@ -566,6 +666,40 @@ func payloadAndAttempts(msg redis.XMessage) (string, int, bool) {
 		}
 	}
 	return payload, attempts, ok
+}
+
+func failedJobFromRedisMessage(queue string, msg redis.XMessage) (failedJob, error) {
+	payload, ok := redisStringValue(msg.Values, "payload")
+	if !ok {
+		return failedJob{}, fmt.Errorf("failed redis stream message %q has no payload", msg.ID)
+	}
+	originalID, _ := redisStringValue(msg.Values, "original_id")
+	reason, _ := redisStringValue(msg.Values, "reason")
+	failedAt, _ := redisStringValue(msg.Values, "failed_at")
+
+	return failedJob{
+		ID:         msg.ID,
+		Queue:      queue,
+		OriginalID: originalID,
+		Payload:    payload,
+		Reason:     reason,
+		FailedAt:   failedAt,
+	}, nil
+}
+
+func redisStringValue(values map[string]any, key string) (string, bool) {
+	value, ok := values[key]
+	if !ok {
+		return "", false
+	}
+	switch typed := value.(type) {
+	case string:
+		return typed, true
+	case []byte:
+		return string(typed), true
+	default:
+		return fmt.Sprint(typed), true
+	}
 }
 
 func (b *redisBackend) streamKey(queue string) string {
