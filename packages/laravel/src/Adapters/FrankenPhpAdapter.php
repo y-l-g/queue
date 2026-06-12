@@ -6,7 +6,6 @@ use Pogo\Queue\Laravel\Contracts\PogoAdapter;
 use Pogo\Queue\Laravel\Exceptions\QueueDispatchException;
 use Pogo\Queue\Laravel\Exceptions\QueueFullException;
 use Pogo\Queue\Laravel\Exceptions\QueuePayloadTooLargeException;
-use Pogo\Queue\Laravel\Exceptions\QueueSendException;
 use Pogo\Queue\Laravel\Exceptions\QueueShuttingDownException;
 use Pogo\Queue\Laravel\Exceptions\QueueWorkerUnavailableException;
 use RuntimeException;
@@ -134,7 +133,7 @@ class FrankenPhpAdapter implements PogoAdapter
     {
         $result = json_decode($response, true);
         if (!is_array($result)) {
-            throw new QueueSendException($message);
+            throw new QueueDispatchException($message);
         }
 
         return $result;
@@ -155,7 +154,7 @@ class FrankenPhpAdapter implements PogoAdapter
             case self::DISPATCH_RESULT_BACKEND_FAILURE:
                 throw new QueueDispatchException($message);
             default:
-                throw new QueueSendException($message);
+                throw new QueueDispatchException($message);
         }
     }
 }
