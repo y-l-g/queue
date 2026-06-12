@@ -46,6 +46,9 @@ FROM dunglas/frankenphp AS runner
 COPY --from=builder /usr/local/bin/frankenphp /usr/local/bin/frankenphp
 ```
 
+For a reusable image recipe, compatibility matrix, and release checksum process,
+see [the packaging guide](docs/packaging.md).
+
 ## Caddy Configuration
 
 Production Redis backend:

@@ -18,4 +18,6 @@
   deliveries through the extension and framework adapters.
 - Fixed Symfony Messenger retry handling so retryable failures acknowledge the
   original delivery after the retry copy is sent instead of dead-lettering it.
+- Added Docker packaging guidance, a compatibility matrix, and release checksum
+  helper.
 - Deprecated the v1 `pogo_queue()` helper in favor of `pogo_queue_push()`.
