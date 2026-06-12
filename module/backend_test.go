@@ -1171,8 +1171,6 @@ func TestRedisPromoteDelayedIsAtomicWhenConfigured(t *testing.T) {
 	}
 
 	body, err := json.Marshal(delayedPayload{
-		ID:       "delayed-atomic-test",
-		Queue:    "default",
 		Payload:  "payload",
 		Attempts: 1,
 	})

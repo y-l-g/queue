@@ -37,30 +37,6 @@ type memoryBackend struct {
 	stats             backendCounters
 }
 
-type backendCounters struct {
-	enqueued        atomic.Uint64
-	reserved        atomic.Uint64
-	acked           atomic.Uint64
-	released        atomic.Uint64
-	failed          atomic.Uint64
-	droppedFull     atomic.Uint64
-	payloadTooLarge atomic.Uint64
-	backendErrors   atomic.Uint64
-}
-
-func (c *backendCounters) snapshot() backendCounterSnapshot {
-	return backendCounterSnapshot{
-		Enqueued:       c.enqueued.Load(),
-		Reserved:       c.reserved.Load(),
-		Acked:          c.acked.Load(),
-		Released:       c.released.Load(),
-		Failed:         c.failed.Load(),
-		DroppedFull:    c.droppedFull.Load(),
-		DroppedPayload: c.payloadTooLarge.Load(),
-		BackendErrors:  c.backendErrors.Load(),
-	}
-}
-
 func newMemoryBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int) *memoryBackend {
 	b := &memoryBackend{
 		queues:            make(map[string]*memoryQueue, len(queues)),

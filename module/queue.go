@@ -44,13 +44,6 @@ type manager struct {
 	once            sync.Once
 }
 
-type deliveryEnvelope struct {
-	ID       string `json:"id"`
-	Queue    string `json:"queue"`
-	Payload  string `json:"payload"`
-	Attempts int    `json:"attempts"`
-}
-
 type pushResult struct {
 	OK      bool   `json:"ok"`
 	ID      string `json:"id,omitempty"`
@@ -175,12 +168,7 @@ func (m *manager) loop(workerIndex int) {
 }
 
 func (m *manager) sendMessage(msg *delivery) error {
-	payload, err := json.Marshal(deliveryEnvelope{
-		ID:       msg.ID,
-		Queue:    msg.Queue,
-		Payload:  msg.Payload,
-		Attempts: msg.Attempts,
-	})
+	payload, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
