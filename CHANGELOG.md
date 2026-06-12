@@ -16,4 +16,6 @@
   lifecycle events, backend errors, dropped payloads, and payload limits.
 - Added failed-job operations to list, retry, forget, and purge failed
   deliveries through the extension and framework adapters.
+- Fixed Symfony Messenger retry handling so retryable failures acknowledge the
+  original delivery after the retry copy is sent instead of dead-lettering it.
 - Deprecated the v1 `pogo_queue()` helper in favor of `pogo_queue_push()`.

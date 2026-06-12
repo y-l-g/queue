@@ -7,6 +7,7 @@ namespace Pogo\Queue\Symfony\Transport;
 use Pogo\Queue\Symfony\Contract\PogoAdapter;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Stamp\DelayStamp;
+use Symfony\Component\Messenger\Stamp\SentForRetryStamp;
 use Symfony\Component\Messenger\Stamp\TransportMessageIdStamp;
 use Symfony\Component\Messenger\Transport\Serialization\PhpSerializer;
 use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
@@ -73,6 +74,12 @@ final class PogoQueueTransport implements TransportInterface
     {
         $stamp = $envelope->last(PogoReceivedStamp::class);
         if (!$stamp instanceof PogoReceivedStamp) {
+            return;
+        }
+
+        $sentForRetry = $envelope->last(SentForRetryStamp::class);
+        if ($sentForRetry instanceof SentForRetryStamp && $sentForRetry->isSent) {
+            $this->adapter->ack($stamp->queue, $stamp->deliveryId);
             return;
         }
 

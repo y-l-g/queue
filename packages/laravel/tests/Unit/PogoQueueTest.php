@@ -3,6 +3,8 @@
 namespace Pogo\Queue\Laravel\Tests\Unit;
 
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Events\Dispatcher as DispatcherContract;
+use Illuminate\Events\Dispatcher;
 use PHPUnit\Framework\TestCase;
 use Pogo\Queue\Laravel\Contracts\PogoAdapter;
 use Pogo\Queue\Laravel\PogoJob;
@@ -153,5 +155,24 @@ class PogoQueueTest extends TestCase
         ]);
         $ackedJob->delete();
         $this->assertSame([['default', '2-0']], $adapter->acked);
+    }
+
+    public function test_job_fail_calls_backend(): void
+    {
+        $adapter = new FakePogoAdapter();
+        $container = new Container();
+        $container->instance(DispatcherContract::class, new Dispatcher($container));
+        $queue = new PogoQueue($adapter);
+        $payload = json_encode(['job' => \stdClass::class, 'data' => []], JSON_THROW_ON_ERROR);
+        $job = PogoJob::fromDelivery($container, $queue, [
+            'id' => '1-0',
+            'queue' => 'default',
+            'payload' => $payload,
+            'attempts' => 1,
+        ]);
+
+        $job->fail(new \RuntimeException('boom'));
+
+        $this->assertSame([['default', '1-0', 'boom']], $adapter->failed);
     }
 }
