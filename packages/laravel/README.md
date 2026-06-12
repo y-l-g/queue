@@ -31,6 +31,10 @@ POGO_REDIS_URL=redis://redis:6379/0
 Delayed dispatch is supported through Laravel's normal `later()` /
 `dispatch()->delay()` APIs.
 
+For production operations, Redis persistence, duplicate-delivery scenarios,
+`visibility_timeout` sizing, failed-job recovery, and alerting guidance, read
+the root [production runbook](../../docs/production-runbook.md).
+
 ## Worker
 
 Run jobs through a FrankenPHP worker entrypoint and construct `PogoJob` from the

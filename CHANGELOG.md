@@ -10,4 +10,6 @@
   lifecycle APIs.
 - Added backend tests, Redis-gated integration coverage, Composer validation,
   PHPStan stub scanning, and PR CI coverage.
+- Added a production runbook covering Redis durability, at-least-once delivery,
+  timeout sizing, deploy behavior, status checks, and failed-job recovery.
 - Deprecated the v1 `pogo_queue()` helper in favor of `pogo_queue_push()`.

@@ -200,15 +200,19 @@ The Symfony bundle registers the transport factory automatically.
 
 ## Operations
 
-- Enable Redis persistence for production deployments.
-- Monitor pending, reserved, delayed, failed, backend error, and payload rejection
-  counts via `pogo_queue_status()`.
+Read [the production runbook](docs/production-runbook.md) before running this in
+production. The key points are:
+
+- Redis is the only production backend. Enable persistence and use a
+  non-evicting memory policy for queue data.
+- Delivery is at least once. Job handlers must be idempotent.
 - Configure `visibility_timeout` above the normal maximum job runtime.
 - Configure `max_attempts` according to job idempotency and failure policy.
-- Alert on growing `failed`, `reserved`, or `backend_errors` counts.
-- During deploys, FrankenPHP stops reserving new work and lets in-flight workers
-  finish until `shutdown_timeout`; unacked Redis messages remain pending and can
-  be reclaimed by another consumer.
+- Monitor pending, reserved, delayed, failed, backend error, and payload rejection
+  counts via `pogo_queue_status()`.
+- During deploys, FrankenPHP stops reserving new work and waits up to
+  `shutdown_timeout`; unacknowledged Redis messages remain pending and can be
+  reclaimed after `visibility_timeout`.
 
 ## Extension API
 
