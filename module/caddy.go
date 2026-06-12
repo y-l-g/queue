@@ -167,13 +167,13 @@ func (g *Queue) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return err
 				}
 				g.Concurrency = value
-			case "worker_threads", "num_threads", "min_threads":
+			case "worker_threads":
 				value, err := parsePositiveIntDirective(d, d.Val())
 				if err != nil {
 					return err
 				}
 				g.WorkerThreads = value
-			case "max_payload_bytes", "max_message_bytes":
+			case "max_payload_bytes":
 				value, err := parsePositiveIntDirective(d, d.Val())
 				if err != nil {
 					return err
@@ -203,12 +203,6 @@ func (g *Queue) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return err
 				}
 				g.MaxAttempts = value
-			case "size":
-				value, err := parsePositiveIntDirective(d, "size")
-				if err != nil {
-					return err
-				}
-				g.Backend.MaxMessages = value
 			default:
 				return d.Errf(`unrecognized subdirective "%s"`, d.Val())
 			}

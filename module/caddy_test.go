@@ -84,3 +84,31 @@ func TestUnmarshalCaddyfileRejectsExtraSingleDirectiveArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestUnmarshalCaddyfileRejectsLegacyAliases(t *testing.T) {
+	tests := []string{
+		`pogo_queue {
+			num_threads 2
+		}`,
+		`pogo_queue {
+			min_threads 2
+		}`,
+		`pogo_queue {
+			max_message_bytes 1024
+		}`,
+		`pogo_queue {
+			size 10
+		}`,
+	}
+
+	for _, input := range tests {
+		t.Run(input, func(t *testing.T) {
+			d := caddyfile.NewTestDispenser(input)
+			var q Queue
+
+			if err := q.UnmarshalCaddyfile(d); err == nil {
+				t.Fatal("expected unmarshal to fail")
+			}
+		})
+	}
+}
