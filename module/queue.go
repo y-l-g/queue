@@ -252,6 +252,12 @@ func (m *manager) status(ctx context.Context, queue string) statusPayload {
 	}
 }
 
+func (m *manager) counters() backendCounterSnapshot {
+	counters := m.backend.Counters()
+	counters.DroppedShutdown += m.droppedShutdown.Load()
+	return counters
+}
+
 func enqueue(queue, payload string, delaySeconds int64) *C.char {
 	globalManagerMu.RLock()
 	m := globalManager

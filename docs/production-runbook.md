@@ -88,10 +88,25 @@ is a migration, not a routine deploy.
 Use a unique Redis `consumer` value per running process or container. If omitted,
 the module derives one from the host and process id.
 
-## Status And Alerting
+## Metrics, Status, And Alerting
 
-Expose `pogo_queue_status()` from an authenticated health endpoint or framework
-command that runs in the same FrankenPHP binary as the queue module.
+When Caddy metrics are enabled, the module registers Prometheus metrics in the
+same registry as Caddy's built-in metrics:
+
+- `caddy_pogo_queue_worker_ready`
+- `caddy_pogo_queue_queue_ready{queue}`
+- `caddy_pogo_queue_messages{queue,state}`
+- `caddy_pogo_queue_events_total{event}`
+- `caddy_pogo_queue_payload_limit_bytes{queue}`
+
+The `state` label is one of `pending`, `delayed`, `reserved`, or `failed`. The
+`event` label covers `enqueued`, `reserved`, `acked`, `released`, `failed`,
+`dropped_full`, `dropped_payload_too_large`, `dropped_shutdown`, and
+`backend_errors`.
+
+You can also expose `pogo_queue_status()` from an authenticated health endpoint
+or framework command that runs in the same FrankenPHP binary as the queue
+module.
 
 Important fields:
 

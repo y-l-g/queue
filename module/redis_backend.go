@@ -409,6 +409,7 @@ func (b *redisBackend) Stats(ctx context.Context, queue string) (queueStats, err
 	} else {
 		pending = 0
 	}
+	counters := b.stats.snapshot()
 
 	return queueStats{
 		Queue:           queue,
@@ -417,16 +418,20 @@ func (b *redisBackend) Stats(ctx context.Context, queue string) (queueStats, err
 		Delayed:         delayed,
 		Reserved:        reserved,
 		Failed:          failed,
-		Enqueued:        b.stats.enqueued.Load(),
-		ReservedTotal:   b.stats.reserved.Load(),
-		Acked:           b.stats.acked.Load(),
-		Released:        b.stats.released.Load(),
-		FailedTotal:     b.stats.failed.Load(),
-		DroppedFull:     b.stats.droppedFull.Load(),
-		DroppedPayload:  b.stats.payloadTooLarge.Load(),
-		BackendErrors:   b.stats.backendErrors.Load(),
+		Enqueued:        counters.Enqueued,
+		ReservedTotal:   counters.Reserved,
+		Acked:           counters.Acked,
+		Released:        counters.Released,
+		FailedTotal:     counters.Failed,
+		DroppedFull:     counters.DroppedFull,
+		DroppedPayload:  counters.DroppedPayload,
+		BackendErrors:   counters.BackendErrors,
 		MaxPayloadBytes: b.maxPayloadBytes,
 	}, nil
+}
+
+func (b *redisBackend) Counters() backendCounterSnapshot {
+	return b.stats.snapshot()
 }
 
 func (b *redisBackend) Close() error {

@@ -53,6 +53,18 @@ type queueStats struct {
 	MaxPayloadBytes int    `json:"max_payload_bytes"`
 }
 
+type backendCounterSnapshot struct {
+	Enqueued        uint64
+	Reserved        uint64
+	Acked           uint64
+	Released        uint64
+	Failed          uint64
+	DroppedFull     uint64
+	DroppedPayload  uint64
+	DroppedShutdown uint64
+	BackendErrors   uint64
+}
+
 type backend interface {
 	Start(context.Context) error
 	Enqueue(context.Context, string, string, time.Duration) (string, int, error)
@@ -61,6 +73,7 @@ type backend interface {
 	Release(context.Context, string, string, time.Duration) (int, error)
 	Fail(context.Context, string, string, string) (int, error)
 	Stats(context.Context, string) (queueStats, error)
+	Counters() backendCounterSnapshot
 	Close() error
 }
 

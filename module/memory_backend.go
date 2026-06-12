@@ -45,6 +45,19 @@ type backendCounters struct {
 	backendErrors   atomic.Uint64
 }
 
+func (c *backendCounters) snapshot() backendCounterSnapshot {
+	return backendCounterSnapshot{
+		Enqueued:       c.enqueued.Load(),
+		Reserved:       c.reserved.Load(),
+		Acked:          c.acked.Load(),
+		Released:       c.released.Load(),
+		Failed:         c.failed.Load(),
+		DroppedFull:    c.droppedFull.Load(),
+		DroppedPayload: c.payloadTooLarge.Load(),
+		BackendErrors:  c.backendErrors.Load(),
+	}
+}
+
 func newMemoryBackend(cfg backendConfig, queues []string, maxPayloadBytes int, visibilityTimeout time.Duration, maxAttempts int) *memoryBackend {
 	b := &memoryBackend{
 		queues:            make(map[string]*memoryQueue, len(queues)),
@@ -240,6 +253,7 @@ func (b *memoryBackend) Stats(_ context.Context, queue string) (queueStats, erro
 	if q == nil {
 		return queueStats{Queue: queue, Ready: false, MaxPayloadBytes: b.maxPayloadBytes}, nil
 	}
+	counters := b.stats.snapshot()
 	return queueStats{
 		Queue:           queue,
 		Ready:           true,
@@ -247,16 +261,20 @@ func (b *memoryBackend) Stats(_ context.Context, queue string) (queueStats, erro
 		Delayed:         int64(len(q.delayed)),
 		Reserved:        int64(len(q.pending)),
 		Failed:          int64(len(q.failed)),
-		Enqueued:        b.stats.enqueued.Load(),
-		ReservedTotal:   b.stats.reserved.Load(),
-		Acked:           b.stats.acked.Load(),
-		Released:        b.stats.released.Load(),
-		FailedTotal:     b.stats.failed.Load(),
-		DroppedFull:     b.stats.droppedFull.Load(),
-		DroppedPayload:  b.stats.payloadTooLarge.Load(),
-		BackendErrors:   b.stats.backendErrors.Load(),
+		Enqueued:        counters.Enqueued,
+		ReservedTotal:   counters.Reserved,
+		Acked:           counters.Acked,
+		Released:        counters.Released,
+		FailedTotal:     counters.Failed,
+		DroppedFull:     counters.DroppedFull,
+		DroppedPayload:  counters.DroppedPayload,
+		BackendErrors:   counters.BackendErrors,
 		MaxPayloadBytes: b.maxPayloadBytes,
 	}, nil
+}
+
+func (b *memoryBackend) Counters() backendCounterSnapshot {
+	return b.stats.snapshot()
 }
 
 func (b *memoryBackend) Close() error {

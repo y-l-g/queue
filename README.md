@@ -209,7 +209,8 @@ production. The key points are:
 - Configure `visibility_timeout` above the normal maximum job runtime.
 - Configure `max_attempts` according to job idempotency and failure policy.
 - Monitor pending, reserved, delayed, failed, backend error, and payload rejection
-  counts via `pogo_queue_status()`.
+  counts via `pogo_queue_status()` or the Caddy Prometheus metrics registered by
+  the module.
 - During deploys, FrankenPHP stops reserving new work and waits up to
   `shutdown_timeout`; unacknowledged Redis messages remain pending and can be
   reclaimed after `visibility_timeout`.

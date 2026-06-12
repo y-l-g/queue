@@ -12,4 +12,6 @@
   PHPStan stub scanning, and PR CI coverage.
 - Added a production runbook covering Redis durability, at-least-once delivery,
   timeout sizing, deploy behavior, status checks, and failed-job recovery.
+- Added Caddy Prometheus metrics for worker readiness, queue message states,
+  lifecycle events, backend errors, dropped payloads, and payload limits.
 - Deprecated the v1 `pogo_queue()` helper in favor of `pogo_queue_push()`.

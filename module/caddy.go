@@ -66,6 +66,10 @@ func (g *Queue) Provision(ctx caddy.Context) error {
 		g.MaxAttempts = defaultMaxAttempts
 	}
 
+	if err := registerQueueMetrics(ctx.GetMetricsRegistry()); err != nil {
+		return err
+	}
+
 	b, err := newBackend(
 		g.Backend,
 		g.Queues,
