@@ -18,7 +18,6 @@
     "phpunit/phpunit": "^13.1",
     "friendsofphp/php-cs-fixer": "^3.0",
     "phpstan/phpstan": "^2.1",
-    "monorepo-php/monorepo": "^12.7",
     "symfony/framework-bundle": "^8.0"
   },
   "autoload": {

@@ -28,6 +28,7 @@ type redisBackend struct {
 }
 
 type delayedPayload struct {
+	ID       string `json:"id,omitempty"`
 	Payload  string `json:"payload"`
 	Attempts int    `json:"attempts"`
 }
@@ -36,18 +37,24 @@ var promoteDelayedScript = redis.NewScript(`
 local items = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, ARGV[2])
 local promoted = 0
 
-for _, item in ipairs(items) do
+local delayed_items = {}
+for index, item in ipairs(items) do
 	local ok, delayed = pcall(cjson.decode, item)
-	if ok and type(delayed) == "table" and type(delayed["payload"]) == "string" then
-		local attempts = tonumber(delayed["attempts"]) or 1
-		if attempts < 1 then
-			attempts = 1
-		end
+	if not ok or type(delayed) ~= "table" or type(delayed["payload"]) ~= "string" then
+		return redis.error_reply("malformed delayed redis queue entry")
+	end
+	delayed_items[index] = delayed
+end
 
-		redis.call("XADD", KEYS[2], "*", "payload", delayed["payload"], "attempts", tostring(math.floor(attempts)))
-		promoted = promoted + 1
+for index, item in ipairs(items) do
+	local delayed = delayed_items[index]
+	local attempts = tonumber(delayed["attempts"]) or 1
+	if attempts < 1 then
+		attempts = 1
 	end
 
+	redis.call("XADD", KEYS[2], "*", "payload", delayed["payload"], "attempts", tostring(math.floor(attempts)))
+	promoted = promoted + 1
 	redis.call("ZREM", KEYS[1], item)
 end
 
@@ -221,7 +228,7 @@ func (b *redisBackend) Enqueue(ctx context.Context, queue, payload string, delay
 	}
 	if delay > 0 {
 		id := fmt.Sprintf("delayed-%d-%d", time.Now().UnixNano(), b.delayedID.Add(1))
-		body, err := json.Marshal(delayedPayload{Payload: payload, Attempts: 1})
+		body, err := json.Marshal(delayedPayload{ID: id, Payload: payload, Attempts: 1})
 		if err != nil {
 			b.stats.backendErrors.Add(1)
 			return "", dispatchResultBackendFailure, err
