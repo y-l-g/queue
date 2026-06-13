@@ -28,6 +28,7 @@ type redisBackend struct {
 }
 
 type delayedPayload struct {
+	ID       string `json:"id,omitempty"`
 	Payload  string `json:"payload"`
 	Attempts int    `json:"attempts"`
 }
@@ -221,7 +222,7 @@ func (b *redisBackend) Enqueue(ctx context.Context, queue, payload string, delay
 	}
 	if delay > 0 {
 		id := fmt.Sprintf("delayed-%d-%d", time.Now().UnixNano(), b.delayedID.Add(1))
-		body, err := json.Marshal(delayedPayload{Payload: payload, Attempts: 1})
+		body, err := json.Marshal(delayedPayload{ID: id, Payload: payload, Attempts: 1})
 		if err != nil {
 			b.stats.backendErrors.Add(1)
 			return "", dispatchResultBackendFailure, err

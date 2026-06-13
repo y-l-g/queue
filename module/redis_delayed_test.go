@@ -71,6 +71,44 @@ func TestRedisPromoteDelayedIsAtomicWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestRedisDelayedDuplicatePayloads(t *testing.T) {
+	ctx, backend := newTestRedisBackend(t, "pogo-test-delayed-duplicates")
+
+	const payload = "payload"
+	const delay = 25 * time.Millisecond
+	for i := 0; i < 2; i++ {
+		if _, result, err := backend.Enqueue(ctx, "default", payload, delay); err != nil {
+			t.Fatalf("enqueue delayed payload failed: %v", err)
+		} else if result != dispatchResultAccepted {
+			t.Fatalf("expected accepted delayed enqueue, got result %d", result)
+		}
+	}
+
+	delayedLen, err := backend.client.ZCard(ctx, backend.delayedKey("default")).Result()
+	if err != nil {
+		t.Fatalf("read delayed length failed: %v", err)
+	}
+	if delayedLen != 2 {
+		t.Fatalf("expected two delayed jobs, got %d", delayedLen)
+	}
+
+	time.Sleep(delay + 25*time.Millisecond)
+	if err := backend.promoteDelayed(ctx, "default", 100); err != nil {
+		t.Fatalf("promote delayed failed: %v", err)
+	}
+
+	messages, err := backend.client.XRange(ctx, backend.streamKey("default"), "-", "+").Result()
+	if err != nil {
+		t.Fatalf("read promoted stream failed: %v", err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("expected two promoted stream messages, got %d", len(messages))
+	}
+	if messages[0].ID == messages[1].ID {
+		t.Fatalf("expected distinct promoted stream ids, got %q", messages[0].ID)
+	}
+}
+
 func TestRedisReserveReportsPromoteDelayedErrorsWhenConfigured(t *testing.T) {
 	ctx, backend := newTestRedisBackend(t, "pogo-test-promote-error")
 
