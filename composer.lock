@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2fc0480c294d5929334d3fa2a15b6ad5",
+    "content-hash": "eccfdbe44a61cabb03129eba201fac43",
     "packages": [
         {
             "name": "brick/math",
@@ -7425,35 +7425,6 @@
                 "source": "https://github.com/mockery/mockery"
             },
             "time": "2024-05-16T03:13:13+00:00"
-        },
-        {
-            "name": "monorepo-php/monorepo",
-            "version": "12.7.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/monorepo-php/monorepo.git",
-                "reference": "7331c7c338aca959253d006fb36379747fae49f6"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/monorepo-php/monorepo/zipball/7331c7c338aca959253d006fb36379747fae49f6",
-                "reference": "7331c7c338aca959253d006fb36379747fae49f6",
-                "shasum": ""
-            },
-            "bin": [
-                "monorepo-builder"
-            ],
-            "type": "library",
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "description": "monorepo-builder phar",
-            "support": {
-                "issues": "https://github.com/monorepo-php/monorepo/issues",
-                "source": "https://github.com/monorepo-php/monorepo/tree/12.7.0"
-            },
-            "time": "2026-04-24T05:51:33+00:00"
         },
         {
             "name": "myclabs/deep-copy",
