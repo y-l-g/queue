@@ -109,6 +109,83 @@ func TestRedisDelayedDuplicatePayloads(t *testing.T) {
 	}
 }
 
+func TestRedisMalformedDelayedEntryIsReportedAndPreserved(t *testing.T) {
+	ctx, backend := newTestRedisBackend(t, "pogo-test-malformed-delayed")
+
+	const malformedMember = `{"id":"legacy","attempts":1}`
+	if err := backend.client.ZAdd(ctx, backend.delayedKey("default"), redis.Z{
+		Score:  float64(time.Now().Add(-time.Second).UnixMilli()),
+		Member: malformedMember,
+	}).Err(); err != nil {
+		t.Fatalf("seed malformed delayed payload failed: %v", err)
+	}
+
+	_, err := backend.Reserve(ctx, []string{"default"}, "consumer", 0)
+	if err == nil {
+		t.Fatal("expected reserve to report malformed delayed entry")
+	}
+	if errors.Is(err, errQueueEmpty) {
+		t.Fatalf("expected backend error, got queue empty: %v", err)
+	}
+	if got := backend.stats.backendErrors.Load(); got != 1 {
+		t.Fatalf("expected one backend error, got %d", got)
+	}
+
+	if _, err := backend.client.ZScore(ctx, backend.delayedKey("default"), malformedMember).Result(); err != nil {
+		t.Fatalf("expected malformed delayed entry to remain for inspection: %v", err)
+	}
+}
+
+func TestRedisMalformedDelayedBatchDoesNotPartiallyPromote(t *testing.T) {
+	ctx, backend := newTestRedisBackend(t, "pogo-test-malformed-delayed-batch")
+
+	validMember, err := json.Marshal(delayedPayload{
+		Payload:  "payload",
+		Attempts: 1,
+	})
+	if err != nil {
+		t.Fatalf("marshal delayed payload failed: %v", err)
+	}
+	const malformedMember = `{"id":"legacy","attempts":1}`
+	now := time.Now()
+	if err := backend.client.ZAdd(ctx, backend.delayedKey("default"),
+		redis.Z{
+			Score:  float64(now.Add(-2 * time.Second).UnixMilli()),
+			Member: string(validMember),
+		},
+		redis.Z{
+			Score:  float64(now.Add(-time.Second).UnixMilli()),
+			Member: malformedMember,
+		},
+	).Err(); err != nil {
+		t.Fatalf("seed delayed payloads failed: %v", err)
+	}
+
+	_, err = backend.Reserve(ctx, []string{"default"}, "consumer", 0)
+	if err == nil {
+		t.Fatal("expected reserve to report malformed delayed entry")
+	}
+	if errors.Is(err, errQueueEmpty) {
+		t.Fatalf("expected backend error, got queue empty: %v", err)
+	}
+
+	streamLen, err := backend.client.XLen(ctx, backend.streamKey("default")).Result()
+	if err != nil {
+		t.Fatalf("read stream length failed: %v", err)
+	}
+	if streamLen != 0 {
+		t.Fatalf("expected no partial promotion, got %d stream messages", streamLen)
+	}
+
+	delayedLen, err := backend.client.ZCard(ctx, backend.delayedKey("default")).Result()
+	if err != nil {
+		t.Fatalf("read delayed length failed: %v", err)
+	}
+	if delayedLen != 2 {
+		t.Fatalf("expected both delayed entries to remain, got %d", delayedLen)
+	}
+}
+
 func TestRedisReserveReportsPromoteDelayedErrorsWhenConfigured(t *testing.T) {
 	ctx, backend := newTestRedisBackend(t, "pogo-test-promote-error")
 
