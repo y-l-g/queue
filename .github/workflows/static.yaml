@@ -73,6 +73,9 @@ jobs:
             --with github.com/dunglas/caddy-cbrotli@v1.0.1 \
             --with github.com/y-l-g/queue/module=./module
 
+      - name: Install PHP dependencies (Root)
+        run: composer install --prefer-dist --no-progress
+
       - name: Run Go Integration Tests
         env:
           GOFLAGS: "-tags=nobadger,nomysql,nopgx,nowatcher"
@@ -81,9 +84,6 @@ jobs:
           cd module
           go test -v -race ./... -mod=readonly
           cd ../
-
-      - name: Install PHP dependencies (Root)
-        run: composer install --prefer-dist --no-progress
 
       - name: Validate Composer manifests
         run: |
