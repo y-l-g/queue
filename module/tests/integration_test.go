@@ -18,6 +18,105 @@ import (
 )
 
 func TestQueueEndToEnd(t *testing.T) {
+	server := startIntegrationServer(t, "worker.php")
+	assertQueueStatus(t, server.client, server.baseURL)
+	outputFile := newMarkerFile(t)
+
+	resp, err := server.client.Post(
+		server.baseURL+"/dispatch.php",
+		"text/plain",
+		bytes.NewBufferString(outputFile),
+	)
+	if err != nil {
+		t.Fatalf("Failed to send POST request: %v", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Logf("Warning: failed to close response body: %v", err)
+		}
+	}()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status code 200, got %d. Body: %s", resp.StatusCode, string(body))
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Dispatched") {
+		t.Fatalf("Expected response body 'Dispatched', got '%s'", string(body))
+	}
+
+	waitForMarker(t, outputFile, "PROCESSED")
+}
+
+func TestLaravelNativeSmoke(t *testing.T) {
+	server := startIntegrationServer(t, "laravel_worker.php")
+	assertQueueStatus(t, server.client, server.baseURL)
+	outputFile := newMarkerFile(t)
+
+	resp, err := server.client.Post(
+		server.baseURL+"/laravel_dispatch.php",
+		"text/plain",
+		bytes.NewBufferString(outputFile),
+	)
+	if err != nil {
+		t.Fatalf("Failed to send Laravel smoke POST request: %v", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Logf("Warning: failed to close Laravel smoke response body: %v", err)
+		}
+	}()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("Expected Laravel smoke status code 200, got %d. Body: %s", resp.StatusCode, string(body))
+	}
+	if !strings.Contains(string(body), "Laravel Dispatched") {
+		t.Fatalf("Expected Laravel smoke dispatch response, got '%s'", string(body))
+	}
+
+	waitForMarker(t, outputFile, "LARAVEL_PROCESSED")
+}
+
+func TestSymfonyNativeSmoke(t *testing.T) {
+	server := startIntegrationServer(t, "symfony_worker.php")
+	assertQueueStatus(t, server.client, server.baseURL)
+	outputFile := newMarkerFile(t)
+
+	resp, err := server.client.Post(
+		server.baseURL+"/symfony_dispatch.php",
+		"text/plain",
+		bytes.NewBufferString(outputFile),
+	)
+	if err != nil {
+		t.Fatalf("Failed to send Symfony smoke POST request: %v", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Logf("Warning: failed to close Symfony smoke response body: %v", err)
+		}
+	}()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("Expected Symfony smoke status code 200, got %d. Body: %s", resp.StatusCode, string(body))
+	}
+	if !strings.Contains(string(body), "Symfony Dispatched") {
+		t.Fatalf("Expected Symfony smoke dispatch response, got '%s'", string(body))
+	}
+
+	waitForMarker(t, outputFile, "SYMFONY_PROCESSED")
+}
+
+type integrationServer struct {
+	baseURL string
+	client  *http.Client
+}
+
+func startIntegrationServer(t *testing.T, workerScript string) integrationServer {
+	t.Helper()
+
 	_, currentFile, _, _ := runtime.Caller(0)
 	testDir := filepath.Dir(currentFile)
 	rootDir := filepath.Dir(testDir)
@@ -36,24 +135,7 @@ func TestQueueEndToEnd(t *testing.T) {
 		t.Fatalf("Failed to close listener: %v", err)
 	}
 
-	workerPath := filepath.Join(testDir, "worker.php")
-
-	tmpOut, err := os.CreateTemp("", "pogo_test_*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	outputFile := tmpOut.Name()
-	if err := tmpOut.Close(); err != nil {
-		t.Fatalf("Failed to close temp file: %v", err)
-	}
-	if err := os.Remove(outputFile); err != nil && !os.IsNotExist(err) {
-		t.Fatalf("Failed to remove output file: %v", err)
-	}
-	defer func() {
-		if err := os.Remove(outputFile); err != nil && !os.IsNotExist(err) {
-			t.Logf("Warning: failed to remove output file: %v", err)
-		}
-	}()
+	workerPath := filepath.Join(testDir, workerScript)
 
 	caddyfileContent := fmt.Sprintf(`
 	{
@@ -84,11 +166,11 @@ func TestQueueEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp Caddyfile: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if err := os.Remove(tmpCaddyfile.Name()); err != nil {
 			t.Logf("Warning: failed to remove temp Caddyfile: %v", err)
 		}
-	}()
+	})
 
 	if _, err := tmpCaddyfile.WriteString(caddyfileContent); err != nil {
 		t.Fatalf("Failed to write temp Caddyfile: %v", err)
@@ -111,15 +193,24 @@ func TestQueueEndToEnd(t *testing.T) {
 		waitDone <- cmd.Wait()
 	}()
 
-	defer func() {
+	t.Cleanup(func() {
 		stopProcessGroup(t, cmd, waitDone)
-	}()
+	})
 
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	client := &http.Client{Timeout: 2 * time.Second}
-	if !waitForServer(client, baseURL+"/dispatch.php") {
+	if !waitForServer(client, baseURL+"/status.php") {
 		t.Fatalf("Server failed to start on port %d within timeout", port)
 	}
+
+	return integrationServer{
+		baseURL: baseURL,
+		client:  client,
+	}
+}
+
+func assertQueueStatus(t *testing.T, client *http.Client, baseURL string) {
+	t.Helper()
 
 	statusResp, err := client.Get(baseURL + "/status.php")
 	if err != nil {
@@ -141,52 +232,52 @@ func TestQueueEndToEnd(t *testing.T) {
 	if _, ok := status["queues"].([]any); !ok {
 		t.Fatalf("Queue status did not include queues: %#v", status)
 	}
+}
 
-	resp, err := client.Post(
-		baseURL+"/dispatch.php",
-		"text/plain",
-		bytes.NewBufferString(outputFile),
-	)
+func newMarkerFile(t *testing.T) string {
+	t.Helper()
+
+	tmpOut, err := os.CreateTemp("", "pogo_test_*")
 	if err != nil {
-		t.Fatalf("Failed to send POST request: %v", err)
+		t.Fatal(err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Logf("Warning: failed to close response body: %v", err)
+	outputFile := tmpOut.Name()
+	if err := tmpOut.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
+	if err := os.Remove(outputFile); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("Failed to remove output file: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Remove(outputFile); err != nil && !os.IsNotExist(err) {
+			t.Logf("Warning: failed to remove output file: %v", err)
 		}
-	}()
+	})
 
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("Expected status code 200, got %d. Body: %s", resp.StatusCode, string(body))
-	}
+	return outputFile
+}
 
-	body, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(body), "Dispatched") {
-		t.Fatalf("Expected response body 'Dispatched', got '%s'", string(body))
-	}
+func waitForMarker(t *testing.T, outputFile string, expected string) {
+	t.Helper()
 
 	timeout := time.After(5 * time.Second)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
+	last := ""
 
-	success := false
 	for {
 		select {
 		case <-timeout:
-			t.Fatal("Timeout waiting for worker to process message")
+			t.Fatalf("Timeout waiting for worker to write marker %q; last content was %q", expected, last)
 		case <-ticker.C:
 			content, err := os.ReadFile(outputFile)
-			if err == nil && string(content) == "PROCESSED" {
-				success = true
-				goto Done
+			if err == nil {
+				last = string(content)
+				if last == expected {
+					return
+				}
 			}
 		}
-	}
-
-Done:
-	if !success {
-		t.Error("Worker did not process the message correctly")
 	}
 }
 
@@ -194,10 +285,15 @@ func waitForServer(client *http.Client, url string) bool {
 	for i := 0; i < 50; i++ {
 		resp, err := client.Get(url)
 		if err == nil {
-			if err := resp.Body.Close(); err != nil {
+			var status map[string]any
+			decodeErr := json.NewDecoder(resp.Body).Decode(&status)
+			closeErr := resp.Body.Close()
+			if closeErr != nil {
 				return false
 			}
-			return true
+			if decodeErr == nil && resp.StatusCode == 200 && status["ready"] == true {
+				return true
+			}
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
